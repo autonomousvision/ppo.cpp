@@ -1,0 +1,12 @@
+{
+  "name": "tensorboard",
+  "version": "1.0.0",
+  "builtin-baseline": "60d979c5884f9564f397fdf7bca50eb5dd8d5a20",
+  "dependencies": ["protobuf"], 
+  "overrides": [
+    {
+      "name": "protobuf",
+      "version-string": "3.13.0"
+    }
+  ]
+}
