@@ -55,7 +55,8 @@ There are some numerical differences but the runs are very close for RL standard
 ![Humanoid](./docs/humanoid_clearnrl_ppo_cpp.png)
 
 Interestingly the C++ implementation is up to 72% faster in SPS than the python implementation on the same hardware without any specific optimizations.
-All runs are in CPU mode which is faster than GPU mode for these tiny networks in both languages, the GPU default in ppo_continuous_action.py is waste of resources.
+All runs are in CPU mode which is faster than GPU mode for these tiny Mujoco networks in both languages, the GPU default in ppo_continuous_action.py is suboptimal.
+For the larger CNN used in the CaRL model the speedup of the GPU in enough to outweigh the GPU-CPU communication overhead.
 
 ## Known problems
 
