@@ -45,7 +45,6 @@ public:
     }
 };
 
-// TODO debug
 class Dirichlet final : public Distribution {
     torch::Tensor concentration_;
 public:
@@ -72,7 +71,6 @@ public:
     }
 
     [[nodiscard]] torch::Tensor entropy() const override {
-        // TODO test
         const auto k = concentration_.size(-1);
         const auto a0 = concentration_.sum(-1);
         return torch::lgamma(concentration_).sum(-1)
@@ -82,7 +80,6 @@ public:
     }
 };
 
-// TODO debug
 class Beta final : public Distribution {
     torch::Tensor alpha_, beta_;
     Dirichlet dirichlet_;

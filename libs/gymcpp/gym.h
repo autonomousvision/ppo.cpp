@@ -199,7 +199,6 @@ public:
         torch::NoGradGuard no_grad;
         for (int i = 0; i < env_array_.size(); ++i) {
             auto next_obs = env_array_[i]->reset(seed+i);
-            // TODO iterate over every key instead.
             obs_["bev_semantics"].index_put_({i}, next_obs["bev_semantics"]);
             obs_["measurements"].index_put_({i}, next_obs["measurements"]);
             obs_["value_measurements"].index_put_({i}, next_obs["value_measurements"]);
@@ -262,7 +261,6 @@ public:
             }
         }
 
-        // TODO check if the other envs need this as well.
         unordered_map<string, Tensor> obs_copy;
         obs_copy["bev_semantics"] = obs_["bev_semantics"].detach().clone();
         obs_copy["measurements"] = obs_["measurements"].detach().clone();
