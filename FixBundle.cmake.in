@@ -2,7 +2,7 @@ include(BundleUtilities)
 
 # Set bundle to the full path name of the executable already
 # existing in the install tree:
-set(bundle "${CMAKE_INSTALL_PREFIX}/bin/gs_ppo_carla@CMAKE_EXECUTABLE_SUFFIX@")
+set(bundle "${CMAKE_INSTALL_PREFIX}/bin/ac_ppo_carla@CMAKE_EXECUTABLE_SUFFIX@")
 
 # Set other_libs to a list of full path names to additional
 # libraries that cannot be reached by dependency analysis.

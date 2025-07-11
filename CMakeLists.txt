@@ -11,10 +11,10 @@ set(CAFFE2_USE_CUDNN ON) # Tell pytorch to use cudnn
 set(CAFFE2_USE_CUSPARSELT ON) # Tell pytorch to use CUSPARSELT, You need to install it or turn off.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 set(APP_SOURCES
-        src/carla/gs_ppo_carla.cpp
+        src/carla/ac_ppo_carla.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/carla/ppo_carla_inference.cpp
 #        ${CMAKE_CURRENT_SOURCE_DIR}/src/ppo_continuous_action.cpp
-#        ${CMAKE_CURRENT_SOURCE_DIR}/src/gs_ppo_continuous_action.cpp
+#        ${CMAKE_CURRENT_SOURCE_DIR}/src/ac_ppo_continuous_action.cpp
 )
 
 foreach(source_file  ${APP_SOURCES})
