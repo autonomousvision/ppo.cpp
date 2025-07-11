@@ -1,0 +1,27 @@
+include(BundleUtilities)
+
+# Set bundle to the full path name of the executable already
+# existing in the install tree:
+set(bundle "${CMAKE_INSTALL_PREFIX}/bin/gs_ppo_carla@CMAKE_EXECUTABLE_SUFFIX@")
+
+# Set other_libs to a list of full path names to additional
+# libraries that cannot be reached by dependency analysis.
+# (Dynamically loaded PlugIns, for example.)
+set(other_libs "/usr/lib/x86_64-linux-gnu/libmpi_cxx.so.40")
+#TODO nccl shared library /usr/lib/x86_64-linux-gnu/libnccl.so.2.23.4 /usr/lib/x86_64-linux-gnu/libnccl.so.2
+#TODO libmpi shared library libmpi_cxx.so.40
+#TODO libmpi shared library libmpi.so.40
+#TODO libmpi shared library libopen-pal.so.40
+#TODO libmpi shared library libhwloc.so.15
+#TODO libmpi shared library libevent_core-2.1.so.7
+#TODO libmpi shared libevent_pthreads-2.1.so.7.0.1
+# TODO make singularity container for ubuntu 22.04
+
+# Set dirs to a list of directories where prerequisite libraries may be found:
+set(dirs
+   "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@"
+   "@CMAKE_LIBRARY_OUTPUT_DIRECTORY@"
+   "${CMAKE_CURRENT_SOURCE_DIR}/libs/opencv-4.10.0/build/lib"
+   )
+
+fixup_bundle("${bundle}" "${other_libs}" "${dirs}")
