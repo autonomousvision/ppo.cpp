@@ -1,0 +1,101 @@
+Bootstrap: docker
+From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+
+%files
+    ./../libs/tensorboard_logger /tensorboard_logger
+    ./../libs/cppzmq-4.10.0 /cppzmq-4.10.0
+    ./../libs/args-6.4.6 /args-6.4.6
+    ./../libs/json_spirit_v4.08 /json_spirit_v4.08
+
+%post
+    apt-get -y update
+    apt-get -y install --reinstall build-essential
+    apt-get -y install wget
+    apt-get install -y autoconf automake libtool curl make unzip git ninja-build
+    apt-get -y remove --purge --auto-remove cmake
+    apt-get -y update
+    apt-get -y install -y software-properties-common lsb-release
+    apt-get -y clean all
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
+    apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+    apt-get -y update
+    apt-get -y install cmake
+    apt-get -y install libboost-all-dev
+    cd /
+    wget https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-with-deps-2.4.1%2Bcu124.zip
+    unzip libtorch-cxx11-abi-shared-with-deps-2.4.1+cu124.zip
+    rm libtorch-cxx11-abi-shared-with-deps-2.4.1+cu124.zip
+    apt-get -y install infiniband-diags ibverbs-utils libibverbs-dev libfabric1 libfabric-dev libpsm2-dev
+    apt-get install -y openmpi-bin openmpi-common libopenmpi-dev libgtk2.0-dev
+    apt-get install -y librdmacm-dev libpsm2-dev
+    apt-get install -y  devscripts debhelper fakeroot
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+    dpkg -i cuda-keyring_1.1-1_all.deb
+    apt-get -y update
+    apt-get -y install cuda-toolkit-12-4
+    apt-get -y --allow-change-held-packages install libnccl2=2.23.4-1+cuda12.4 libnccl-dev=2.23.4-1+cuda12.4
+    apt-get -y install ninja-build
+    apt-get -y install libblas-dev liblapack-dev
+    apt-get -y install gpg-agent wget
+    wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list
+    apt-get -y update
+    apt-get -y install intel-oneapi-mkl
+    apt-get -y install intel-oneapi-mkl-devel
+    apt-get -y install libhwloc-dev
+    apt-get -y install libevent-dev
+    apt-get -y install software-properties-common
+    add-apt-repository ppa:ubuntu-toolchain-r/test
+    apt-get -y update
+    apt-get -y install --only-upgrade libstdc++6
+    apt-get -y install libgomp1
+    apt-get -y install pkg-config
+    apt-get -y install libtinfo6
+    apt-get -y install libgtk2.0-dev
+    apt-get -y install ffmpeg
+    apt-get -y install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+    apt-get -y install libeigen3-dev
+    apt-get -y install libcanberra-gtk-module libcanberra-gtk3-module
+    wget https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz
+    tar -xvzf protobuf-cpp-3.13.0.tar.gz
+    cd protobuf-3.13.0
+    ./autogen.sh
+    ./configure
+    make -j$(nproc)  # Compile using all CPU cores
+    make install
+    ldconfig
+    protoc --version
+    cd /tensorboard_logger
+    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
+    cmake --install build2
+    cd /
+    apt-get -y install libzmq3-dev
+    cd /cppzmq-4.10.0
+    mkdir build2
+    cd build2
+    cmake ..
+    make -j4 install
+    cd /
+    cd /args-6.4.6
+    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
+    cmake --install build2
+    cd /
+    cd /json_spirit_v4.08
+    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
+    cmake --install build2
+    cd /
+    # https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html
+    mkdir -p opencv
+    cd opencv
+    wget -O opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
+    unzip opencv.zip
+    mkdir -p build && cd build
+    cmake -G Ninja ../opencv-4.10.0
+    cmake --build .
+    ninja install
+    cd /
+
+    gcc --version
+
+%runscript
+
