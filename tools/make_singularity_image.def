@@ -11,6 +11,9 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     apt-get -y update
     apt-get -y install --reinstall build-essential
     apt-get -y install wget
+    apt-get install -y locales
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
     apt-get install -y autoconf automake libtool curl make unzip git ninja-build
     apt-get -y remove --purge --auto-remove cmake
     apt-get -y update
