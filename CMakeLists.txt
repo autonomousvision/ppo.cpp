@@ -68,7 +68,7 @@ target_link_libraries(${source_name} PRIVATE CUDA::cudart)
 # target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
 
 
-find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
+# find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
 
 target_link_libraries(${source_name} LINK_PUBLIC ${GLFW})
 
