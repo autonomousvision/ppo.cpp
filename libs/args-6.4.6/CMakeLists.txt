@@ -19,7 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5)
 
 project(args LANGUAGES CXX VERSION 6.4.6 DESCRIPTION "A flexible single-header C++11 argument parsing library that is designed to appear somewhat similar to Python's argparse" HOMEPAGE_URL "https://github.com/Taywee/args")
 
