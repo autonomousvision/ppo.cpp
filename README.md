@@ -24,8 +24,9 @@ The container is currently not compatible for the Mujoco code. Some libaries are
 ## Compiling
 The code can be compiled via cmake:
 ```Shell
-singularity exec ppo_cpp.sif cmake -B build -DCMAKE_BUILD_TYPE=Release -G "Ninja" ..
-singularity exec ppo_cpp.sif cmake --build build -j20
+cd /path/to/ppo.cpp
+singularity exec /path/to/ppo_cpp.sif cmake -B build -DCMAKE_BUILD_TYPE=Release -G "Ninja"
+singularity exec /path/to/ppo_cpp.sif cmake --build build -j20
 ```
 By default, the cmake script compiles both the Mujoco and CARLA code. 
 The mujoco code is currently commented in [CMakeLists.txt](CMakeLists.txt) because the container doesn't support it yet.

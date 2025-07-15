@@ -25,12 +25,14 @@ add_executable(${source_name}
         src/distributed.cpp)
 
 target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/include)
 target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/include)
 target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/ThreadPool)
-target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib)
 target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs)
 target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/include)
+# target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib)
+
 
 
 include(FindProtobuf)
@@ -62,8 +64,8 @@ target_include_directories(${source_name} PRIVATE ${CUDAToolkit_INCLUDE_DIRS} ${
 target_link_libraries(${source_name} PRIVATE CUDA::cudart)
 
 
-find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
-target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
+# find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
+# target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
 
 
 find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
