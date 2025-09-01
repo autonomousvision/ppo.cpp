@@ -43,7 +43,7 @@ Other hyperparameters can be similarly set via the program arguments.
 ```Shell
 cd /path/to/ppo.cpp
 singularity exec --nv tools/ppo_cpp.sif build/ppo_continuous_action --env_id Humanoid-v4
-singularity exec --nv tools/ppo_cpp.sif mpirun -n 1 --bind-to none  build/ac_ppo_continuous_action --env_id HalfCheetah-v5
+singularity exec --nv tools/ppo_cpp.sif build/ac_ppo_continuous_action --env_id HalfCheetah-v5
 ```
 
 ### Multi-GPU training
