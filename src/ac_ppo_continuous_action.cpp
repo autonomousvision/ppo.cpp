@@ -106,41 +106,41 @@ public:
   [[nodiscard]] string to_string() const {
     return (boost::format("|param|value|\n"
                   "|-|-|\n"
-                  "|seed|%s|\n"
-                  "|eval_seed|%s|\n"
-                  "|total_timesteps|%s|\n"
-                  "|learning_rate|%s|\n"
-                  "|num_envs|%s|\n"
-                  "|num_steps|%s|\n"
-                  "|gamma|%s|\n"
-                  "|gae_lambda|%s|\n"
-                  "|num_minibatches|%s|\n"
-                  "|update_epochs|%s|\n"
-                  "|norm_adv|%s|\n"
-                  "|clip_coef|%s|\n"
-                  "|clip_vloss|%s|\n"
-                  "|ent_coef|%s|\n"
-                  "|vf_coef|%s|\n"
-                  "|max_grad_norm|%s|\n"
-                  "|adam_eps|%s|\n"
-                  "|anneal_lr|%s|\n"
-                  "|num_eval_runs|%s|\n"
-                  "|clip_actions|%s|\n"
+                  "|seed|%d|\n"
+                  "|eval_seed|%d|\n"
+                  "|total_timesteps|%d|\n"
+                  "|learning_rate|%f|\n"
+                  "|num_envs|%d|\n"
+                  "|num_steps|%d|\n"
+                  "|gamma|%f|\n"
+                  "|gae_lambda|%f|\n"
+                  "|num_minibatches|%u|\n"
+                  "|update_epochs|%u|\n"
+                  "|norm_adv|%d|\n"
+                  "|clip_coef|%f|\n"
+                  "|clip_vloss|%d|\n"
+                  "|ent_coef|%f|\n"
+                  "|vf_coef|%f|\n"
+                  "|max_grad_norm|%f|\n"
+                  "|adam_eps|%f|\n"
+                  "|anneal_lr|%d|\n"
+                  "|num_eval_runs|%u|\n"
+                  "|clip_actions|%d|\n"
                   "|exp_name|%s|\n"
-                  "|batch_size|%s|\n"
-                  "|minibatch_size|%s|\n"
-                  "|num_iterations|%s|\n"
-                  "|torch_deterministic|%s|\n"
+                  "|batch_size|%u|\n"
+                  "|minibatch_size|%u|\n"
+                  "|num_iterations|%u|\n"
+                  "|torch_deterministic|%d|\n"
                   "|exp_name_stem|%s|\n"
                   "|env_id|%s|\n"
                   "|collect_device|%s|\n"
                   "|train_device|%s|\n"
-                  "|num_envs_per_device|%s|\n"
-                  "|batch_size_per_device|%s|\n"
-                  "|use_dd_ppo_preempt|%s|\n"
-                  "|dd_ppo_min_perc|%s|\n"
-                  "|dd_ppo_preempt_threshold|%s|\n"
-                  "|minibatch_per_device|%s|\n")
+                  "|num_envs_per_device|%u|\n"
+                  "|batch_size_per_device|%u|\n"
+                  "|use_dd_ppo_preempt|%d|\n"
+                  "|dd_ppo_min_perc|%f|\n"
+                  "|dd_ppo_preempt_threshold|%f|\n"
+                  "|minibatch_per_device|%u|\n")
                   % seed % eval_seed % total_timesteps % learning_rate % num_envs % num_steps % gamma % gae_lambda %
                   num_minibatches % update_epochs % norm_adv % clip_coef % clip_vloss % ent_coef % vf_coef % max_grad_norm %
                   adam_eps % anneal_lr % num_eval_runs % clip_actions % exp_name % batch_size % minibatch_size %
@@ -214,8 +214,9 @@ void save_state(const Agent& agent, const optim::Adam& optimizer, const filesyst
 // main function
 // For multi-device training start the program with: mpirun -n 2 --bind-to none gs_ppo_carla
 int main(const int argc, const char** argv) {
-  auto program_location = filesystem::canonical("/proc/self/exe"); // Linux only
-  std::string directory = std::filesystem::path(program_location).parent_path().string();
+  filesystem::path exe = filesystem::canonical(argv[0]);
+  filesystem::path basedir = exe.parent_path();
+  std::string directory = basedir.string();
   cout << "Location of program: " << directory << endl;
   ios_base::sync_with_stdio(false);  // Faster print
   // Can be slightly faster to turn off multi-threading in libtorch. Might depend on model size.
@@ -335,7 +336,7 @@ int main(const int argc, const char** argv) {
   cout << "rank: " << rank << "\n";
   cout << "local_rank: " << local_rank << endl;
 
-  filesystem::path exp_folder(directory + "/../models"s);
+  filesystem::path exp_folder(basedir / ".." / "models");
   exp_folder = exp_folder / config.exp_name;
   filesystem::create_directories(exp_folder);
 
@@ -403,18 +404,22 @@ int main(const int argc, const char** argv) {
   vector<shared_ptr<SeqVectorEnv>> envs;
 
   if (config.env_id == "Humanoid-v4") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "humanoid.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs_per_device; ++i) {
       std::vector<shared_ptr<EnvironmentWrapper>> env_array;
 
-      auto env_0 = make_shared<HumanoidV4Env>(directory + "/../libs/gymcpp/mujoco/assests/humanoid.xml", "rgb_array");
+      auto env_0 = make_shared<HumanoidV4Env>(mujoco_xml.string(), "rgb_array");
       env_array.push_back(make_env(env_0, config.gamma));
       envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
     }
   }
   else if (config.env_id == "HalfCheetah-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "half_cheetah.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs_per_device; ++i) {
       std::vector<shared_ptr<EnvironmentWrapper>> env_array;
-      auto env_0 = make_shared<HalfCheetahV5Env>(directory + "/../libs/gymcpp/mujoco/assests/half_cheetah.xml", "rgb_array");
+      auto env_0 = make_shared<HalfCheetahV5Env>(mujoco_xml.string(), "rgb_array");
       env_array.push_back(make_env(env_0, config.gamma));
       envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
     }

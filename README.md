@@ -17,21 +17,17 @@ sudo singularity build ppo_cpp.sif make_singularity_image.def
 Alternatively you can setup your own computer by installing all necessary libaries. You can have a look at [make_singularity_image.def](tools/make_singularity_image.def) on how to do it.
 This often takes some time and you will face various issues, so it is only recommended for experienced C++ users.
 
-The container is currently not compatible for the Mujoco code. Some libaries are missing and the use of 
-`<format>` in the file needs to be changed to `<boost/format>` because the ubuntu 22 gcc version in the compiler does not support `<format>` yet.
-
-
 ## Compiling
 The code can be compiled via cmake:
 ```Shell
 cd /path/to/ppo.cpp
-singularity exec /path/to/ppo_cpp.sif cmake -B build -DCMAKE_BUILD_TYPE=Release -G "Ninja"
-singularity exec /path/to/ppo_cpp.sif cmake --build build -j20
+singularity exec tools/ppo_cpp.sif cmake -B build -DCMAKE_BUILD_TYPE=Release -G "Ninja"
+singularity exec tools/ppo_cpp.sif cmake --build build -j$(nproc)
 ```
-By default, the cmake script compiles the CARLA code. 
-The mujoco code is currently commented in [CMakeLists.txt](CMakeLists.txt) because the container doesn't support it yet.
 
 ## Training models
+
+### CARLA
 To train CARLA models have a look at the training scripts in [CaRL](https://github.com/autonomousvision/CaRL/blob/main/CARLA/team_code/train_carl_cpp.sh).  
 Generally you need to build the container, compile the program and then set the paths correctly: 
 ```Shell
@@ -39,11 +35,23 @@ Generally you need to build the container, compile the program and then set the 
 --cpp_singularity_file_path /path/to/ppo_cpp.sif
 ```
 
+### Mujoco
+
+To run the mujoco model cd into the repositories directory and run either of these two commands.
+The environment can be set via the `--env_id` variable. Humanoid-v4 and HalfCheetah-v5 are currently supported.
+Other hyperparameters can be similarly set via the program arguments.
+```Shell
+cd /path/to/ppo.cpp
+singularity exec --nv tools/ppo_cpp.sif build/ppo_continuous_action --env_id Humanoid-v4
+singularity exec --nv tools/ppo_cpp.sif mpirun -n 1 --bind-to none  build/ac_ppo_continuous_action --env_id HalfCheetah-v5
+```
+
+### Multi-GPU training
 Libtorch does not natively support multi-gpu training. 
 We implemented the multi-gpu communication ourselves using the backend code of [torch-fort](https://github.com/NVIDIA/TorchFort).
 To use multiple GPUs for training the code needs to be started with mpirun (`-n` = number of GPUs), similar how pytorch DDP ist started with torchrun:
 ```Shell
-mpirun -n 1 --bind-to none /path/to/ppo_cpp --exp_name_stem Test_AC_PPO_000 --env_id HalfCheetah-v5 --seed 500
+singularity exec --nv tools/ppo_cpp.sif mpirun -n 1 --bind-to none  build/ac_ppo_continuous_action --env_id HalfCheetah-v5
 ```
 
 ## Reproducibility

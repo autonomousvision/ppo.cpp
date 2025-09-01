@@ -25,6 +25,16 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     apt-get -y install cmake
     apt-get -y install libboost-all-dev
     cd /
+    apt-get -y install libwayland-dev libxkbcommon-dev xorg-dev
+    mkdir -p /glfw_3_4
+    cd /glfw_3_4
+    wget https://github.com/glfw/glfw/archive/refs/tags/3.4.tar.gz
+    tar -xvzf 3.4.tar.gz
+    rm 3.4.tar.gz
+    cd glfw-3.4
+    mkdir -p build2 && cmake -B build2 -S . && cmake --build build2 -j
+    cmake --install build2
+    cd /
     wget https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-with-deps-2.4.1%2Bcu124.zip
     unzip libtorch-cxx11-abi-shared-with-deps-2.4.1+cu124.zip
     rm libtorch-cxx11-abi-shared-with-deps-2.4.1+cu124.zip
@@ -61,6 +71,7 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     apt-get -y install libcanberra-gtk-module libcanberra-gtk3-module
     wget https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz
     tar -xvzf protobuf-cpp-3.13.0.tar.gz
+    rm protobuf-cpp-3.13.0.tar.gz
     cd protobuf-3.13.0
     ./autogen.sh
     ./configure
@@ -69,23 +80,23 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     ldconfig
     protoc --version
     cd /tensorboard_logger
-    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
-    cmake --install build2
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
     cd /
     apt-get -y install libzmq3-dev
     cd /cppzmq-4.10.0
-    mkdir build2
-    cd build2
+    mkdir build3
+    cd build3
     cmake ..
     make -j4 install
     cd /
     cd /args-6.4.6
-    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
-    cmake --install build2
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
     cd /
     cd /json_spirit_v4.08
-    mkdir -p build2 && cmake -B build2 . && cmake --build build2 -j
-    cmake --install build2
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
     cd /
     # https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html
     mkdir -p opencv
@@ -97,6 +108,10 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     cmake --build .
     ninja install
     cd /
+
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    rm -rf /usr/share/doc/* /usr/share/man/*
 
     gcc --version
 

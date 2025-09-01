@@ -13,8 +13,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 set(APP_SOURCES
         src/carla/ac_ppo_carla.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/carla/ppo_carla_inference.cpp
-#        ${CMAKE_CURRENT_SOURCE_DIR}/src/ppo_continuous_action.cpp
-#        ${CMAKE_CURRENT_SOURCE_DIR}/src/ac_ppo_continuous_action.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ppo_continuous_action.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ac_ppo_continuous_action.cpp
 )
 
 foreach(source_file  ${APP_SOURCES})
@@ -30,10 +30,8 @@ target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/lib
 target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs)
 target_include_directories(${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/include)
-# target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib)
-
-
+target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/include)
+target_include_directories (${source_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib)
 
 include(FindProtobuf)
 find_package(Protobuf REQUIRED)
@@ -64,11 +62,14 @@ target_include_directories(${source_name} PRIVATE ${CUDAToolkit_INCLUDE_DIRS} ${
 target_link_libraries(${source_name} PRIVATE CUDA::cudart)
 
 
-# find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
-# target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
+find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
+target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp/mujoco/assets/humanoid.xml
+        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/mujoco/assets)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp/mujoco/assets/half_cheetah.xml
+        DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/mujoco/assets)
 
-
-# find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
+find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
 
 target_link_libraries(${source_name} LINK_PUBLIC ${GLFW})
 

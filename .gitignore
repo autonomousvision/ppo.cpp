@@ -123,3 +123,4 @@ libs/opencv-4.10.0
 /tools/*.sif
 /tools/build/
 .idea/*
+build
