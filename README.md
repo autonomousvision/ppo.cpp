@@ -42,7 +42,7 @@ Generally you need to build the container, compile the program and then set the 
 
 To run the mujoco model cd into the repositories directory and run either of these two commands.
 The environment can be set via the `--env_id` variable. Humanoid-v4, HalfCheetah-v5, Hopper-v5 and Anv-v5 are currently supported.
-You can find documentation for the mujoco environments in the [gymnasium docs](https://gymnasium.farama.org/environments/mujoco/) the implementations are identical.
+You can find documentation for the mujoco environments in the [gymnasium docs](https://gymnasium.farama.org/environments/mujoco/), the implementations are identical.
 Other hyperparameters can be similarly set via the program arguments.
 ```Shell
 cd /path/to/ppo.cpp
