@@ -86,6 +86,7 @@ There are 3 solutions to this:
 
 ## News
 [19/Oct/2025] Added Ant-v5 and Hopper-v5 environments to mujoco. Singularty container now fully supports mujoco environments. Mujoco renderer can now render multiple environments in parallel.
+
 [10/Aug/2025] Initial code release.
 
 ## License
