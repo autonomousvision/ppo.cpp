@@ -123,3 +123,7 @@ libs/opencv-4.10.0
 /tools/*.sif
 /tools/build/
 .idea/*
+libs/args-6.4.6/build2
+libs/json_spirit_v4.08/build2
+libs/tensorboard_logger/build2
+build

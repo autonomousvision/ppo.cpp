@@ -1,5 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5)
 
+add_definitions(-DBOOST_TIMER_ENABLE_DEPRECATED)
 PROJECT(json_spirit)
 SUBDIRS(json_spirit json_demo json_headers_only_demo json_map_demo json_test)
 INCLUDE_DIRECTORIES(json_spirit)

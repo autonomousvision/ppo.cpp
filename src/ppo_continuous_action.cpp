@@ -1,7 +1,6 @@
 #include <iostream>
 #include <iomanip>
 #include <memory>
-#include <format>
 #include <tuple>
 #include <numeric>
 #include <random>
@@ -19,6 +18,8 @@
 #include <gymcpp/gym.h>
 #include <gymcpp/mujoco/humanoid_v4.h>
 #include <gymcpp/mujoco/half_cheetah_v5.h>
+#include <gymcpp/mujoco/ant_v5.h>
+#include <gymcpp/mujoco/hopper_v5.h>
 #include <gymcpp/wrappers/common.h>
 #include <gymcpp/wrappers/stateful_observation.h>
 #include <gymcpp/wrappers/transform_observation.h>
@@ -29,6 +30,8 @@
 #include <tqdm/tqdm.hpp>
 #include "tensorboard_logger.h"
 #include <args.hxx>
+#include <boost/format.hpp>
+#include <GLFW/glfw3.h>
 
 using namespace std;
 using namespace torch;
@@ -69,46 +72,47 @@ public:
   bool torch_deterministic = true;
   string exp_name_stem = "PPO_002"s;
   string env_id = "Humanoid-v4"s;
+  string render = "rgb_array"s;  // Set to human for Visualizing the training with OpenGL, rgb_array for no visualization
 
-  string exp_name = format("{}_{}", exp_name_stem, seed);
+  string exp_name = (boost::format("%s_%d") % exp_name_stem % seed).str();
   int batch_size {num_steps * num_envs};
   int minibatch_size {batch_size / num_minibatches};
   int num_iterations {total_timesteps / batch_size};
 
   [[nodiscard]] string to_string() const {
-    return format("|param|value|\n"
+    return (boost::format("|param|value|\n"
                   "|-|-|\n"
-                  "|seed|{}|\n"
-                  "|eval_seed|{}|\n"
-                  "|total_timesteps|{}|\n"
-                  "|learning_rate|{}|\n"
-                  "|num_envs|{}|\n"
-                  "|num_steps|{}|\n"
-                  "|gamma|{}|\n"
-                  "|gae_lambda|{}|\n"
-                  "|num_minibatches|{}|\n"
-                  "|update_epochs|{}|\n"
-                  "|norm_adv|{}|\n"
-                  "|clip_coef|{}|\n"
-                  "|clip_vloss|{}|\n"
-                  "|ent_coef|{}|\n"
-                  "|vf_coef|{}|\n"
-                  "|max_grad_norm|{}|\n"
-                  "|adam_eps|{}|\n"
-                  "|anneal_lr|{}|\n"
-                  "|num_eval_runs|{}|\n"
-                  "|clip_actions|{}|\n"
-                  "|exp_name|{}|\n"
-                  "|batch_size|{}|\n"
-                  "|minibatch_size|{}|\n"
-                  "|num_iterations|{}|\n"
-                  "|torch_deterministic|{}|\n"
-                  "|exp_name_stem|{}|\n"
-                  "|env_id|{}|\n"
-                  , seed, eval_seed, total_timesteps, learning_rate, num_envs, num_steps, gamma, gae_lambda,
-                  num_minibatches, update_epochs, norm_adv, clip_coef, clip_vloss, ent_coef, vf_coef, max_grad_norm,
-                  adam_eps, anneal_lr, num_eval_runs, clip_actions, exp_name, batch_size, minibatch_size,
-                  num_iterations, torch_deterministic, exp_name_stem, env_id);
+                  "|seed|%d|\n"
+                  "|eval_seed|%d|\n"
+                  "|total_timesteps|%d|\n"
+                  "|learning_rate|%f|\n"
+                  "|num_envs|%d|\n"
+                  "|num_steps|%d|\n"
+                  "|gamma|%f|\n"
+                  "|gae_lambda|%f|\n"
+                  "|num_minibatches|%d|\n"
+                  "|update_epochs|%d|\n"
+                  "|norm_adv|%d|\n"
+                  "|clip_coef|%f|\n"
+                  "|clip_vloss|%d|\n"
+                  "|ent_coef|%f|\n"
+                  "|vf_coef|%f|\n"
+                  "|max_grad_norm|%f|\n"
+                  "|adam_eps|%f|\n"
+                  "|anneal_lr|%d|\n"
+                  "|num_eval_runs|%d|\n"
+                  "|clip_actions|%d|\n"
+                  "|exp_name|%s|\n"
+                  "|batch_size|%d|\n"
+                  "|minibatch_size|%d|\n"
+                  "|num_iterations|%d|\n"
+                  "|torch_deterministic|%d|\n"
+                  "|exp_name_stem|%s|\n"
+                  "|env_id|%s|\n")
+                  % seed % eval_seed % total_timesteps % learning_rate % num_envs % num_steps % gamma % gae_lambda %
+                  num_minibatches % update_epochs % norm_adv % clip_coef % clip_vloss % ent_coef % vf_coef % max_grad_norm %
+                  adam_eps % anneal_lr % num_eval_runs % clip_actions % exp_name % batch_size % minibatch_size %
+                  num_iterations % torch_deterministic % exp_name_stem % env_id).str();
   }
 };
 
@@ -179,8 +183,15 @@ int main(const int argc, const char** argv) {
   ios_base::sync_with_stdio(false);  // Faster print
   // Can be slightly faster to turn off multi-threading in libtorch.
   // Somehow affects the result of computation though :/
-   torch::set_num_threads(1);
-   torch::set_num_interop_threads(1);
+  set_num_threads(1);
+  set_num_interop_threads(1);
+#ifdef _WIN32
+  _putenv_s("OMP_NUM_THREADS", "1");
+  _putenv_s("MKL_NUM_THREADS", "1");
+#else
+  setenv("OMP_NUM_THREADS", "1", 1);
+  setenv("MKL_NUM_THREADS", "1", 1);
+#endif
 
   GlobalConfig config;
 
@@ -209,6 +220,7 @@ int main(const int argc, const char** argv) {
   args::ValueFlag exp_name_stem(parser, "exp_name_stem", "Name of the experiment.", {"exp_name_stem"}, config.exp_name_stem);
   args::ValueFlag env_id(parser, "env_id", "Name of the mujoco env to be executed.", {"env_id"}, config.env_id);
   args::ValueFlag num_envs(parser, "num_envs", "Number of environments to be used.", {"num_envs"}, config.num_envs);
+  args::ValueFlag render(parser, "render", "Set to human for Visualizing the training with OpenGL, rgb_array for no visualization", {"render"}, config.render);
 
   try
   {
@@ -250,15 +262,17 @@ int main(const int argc, const char** argv) {
   config.exp_name_stem = args::get(exp_name_stem);
   config.env_id = args::get(env_id);
   config.num_envs = args::get(num_envs);
+  config.render = args::get(render);
 
   // Need to recompute them as the value might have changed
-  config.exp_name = format("{}_{}", config.exp_name_stem, config.seed);
+  config.exp_name = (boost::format("%s_%d") % config.exp_name_stem % config.seed).str();
   config.batch_size = config.num_steps * config.num_envs;
   config.minibatch_size = config.batch_size / config.num_minibatches;
   config.num_iterations = config.total_timesteps / config.batch_size;
 
-  // Unfortunately relative paths are tricky to get consistent cross plattform.
-  filesystem::path exp_folder("../models"s);
+  filesystem::path exe = filesystem::canonical(argv[0]);
+  filesystem::path basedir = exe.parent_path();
+  filesystem::path exp_folder(basedir / ".." / "models");
   exp_folder = exp_folder / config.exp_name;
   filesystem::create_directories(exp_folder);
 
@@ -271,32 +285,52 @@ int main(const int argc, const char** argv) {
   at::globalContext().setDeterministicCuDNN(config.torch_deterministic);
   at::globalContext().setDeterministicAlgorithms(config.torch_deterministic, true);
 
-  cout << "Parallelization mehtod: " << get_parallel_info() << endl;
+  cout << "Parallelization mehtod: \n" << get_parallel_info() << endl;
 
   // CPU is a lot faster than GPU in ppo_continous_action.
-  // Device collect_device(kCUDA, 0);
-  Device collect_device(kCPU);
-  // Device train_device(kCUDA, 0);
-  Device train_device(kCPU);
+  // Device collect_device(kCUDA, 0); // Almost never good with Mujoco
+  Device collect_device(kCPU); // Sending data GPU <-> CPU env is too much overhead in fast envs.
+  // Device train_device(kCUDA, 0);  // Use GPU training when using larger mini-batch sizes
+  Device train_device(kCPU);  // Best for default Mujoco Parameters
 
 
   std::vector<shared_ptr<EnvironmentWrapper>> env_array;
 
   if (config.env_id == "Humanoid-v4") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "humanoid.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs; ++i) {
-      auto env_0 = make_shared<HumanoidV4Env>("../libs/gymcpp/mujoco/assests/humanoid.xml", "rgb_array");
+      auto env_0 = make_shared<HumanoidV4Env>(mujoco_xml.string(), config.render);
       env_array.push_back(make_env(env_0, config.gamma));
     }
   }
   else if (config.env_id == "HalfCheetah-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "half_cheetah.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs; ++i) {
-      auto env_0 = make_shared<HalfCheetahV5Env>("../libs/gymcpp/mujoco/assests/half_cheetah.xml", "rgb_array");
+      auto env_0 = make_shared<HalfCheetahV5Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0, config.gamma));
+    }
+  }
+  else if (config.env_id == "Ant-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "ant.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
+    for (int i = 0; i < config.num_envs; ++i) {
+      auto env_0 = make_shared<AntV5Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0, config.gamma));
+    }
+  }
+  else if (config.env_id == "Hopper-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "hopper.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
+    for (int i = 0; i < config.num_envs; ++i) {
+      auto env_0 = make_shared<HopperV5Env>(mujoco_xml.string(), config.render);
       env_array.push_back(make_env(env_0, config.gamma));
     }
   }
   else
   {
-    cerr << format("env_id: {} is not implemented.", config.env_id) << endl;
+    cerr << (boost::format("env_id: %s is not implemented.") % config.env_id).str() << endl;
     return 1;
   }
 
@@ -379,7 +413,7 @@ int main(const int argc, const char** argv) {
       {
         if (info.has_value()) {
           auto [r, l, t] = info.value();
-          cout << format("global_step={}, episodic_return={:.2f} \n", global_step, r);
+          cout << (boost::format("global_step=%d, episodic_return=%.2f \n") % global_step % r).str();
           total_reward += r;
           total_length += l;
           finished_envs++;
@@ -397,6 +431,13 @@ int main(const int argc, const char** argv) {
         logger.add_scalar("charts/episodic_return_per_sec", static_cast<int>(passed_seconds), avg_reward);
       }
     }
+
+    if (config.render == "human"s) {
+      // The main thread need to occasionally call this, otherwise the OS thinks the rendering windows are unresponsive.
+      // Not threadsafe, so we cannot call it from the data collection threads.
+      glfwPollEvents();
+    }
+
     std::cout << std::fixed << std::setprecision(6) << "Total env step time" << " " << reduce(avg_env_time.begin(), avg_env_time.end()) << " seconds \n";
     tt.toc("Time to collect data:");
 
@@ -501,19 +542,19 @@ int main(const int argc, const char** argv) {
     tt.toc("Time to train");
 
     tt.tic();
-    save_state(agent, optimizer, exp_folder, vformat("model_latest_{:09d}.pth"s, make_format_args(iteration)), vformat("optimizer_latest_{:09d}.pth"s, make_format_args(iteration)));
+    save_state(agent, optimizer, exp_folder, (boost::format("model_latest_%09d.pth") %  iteration).str(), (boost::format("optimizer_latest_%09d.pth") %  iteration).str());
 
     // Cleanup files from past iterations
     for (const auto& dirEntry : filesystem::directory_iterator(exp_folder)) {
       const auto filename = dirEntry.path().filename().string();
       if (filename.starts_with("model_latest_") and filename.ends_with(".pth")) {
-          if(filename != vformat("model_latest_{:09d}.pth"s, make_format_args(iteration))) {
+          if(filename != (boost::format("model_latest_%09d.pth") %  iteration).str()) {
             filesystem::path old_model_file = exp_folder / filename;
             filesystem::remove(old_model_file);
           }
       }
       if (filename.starts_with("optimizer_latest_") and filename.ends_with(".pth")) {
-        if(filename != vformat("optimizer_latest_{:09d}.pth"s, make_format_args(iteration))) {
+        if(filename != (boost::format("optimizer_latest_%09d.pth") % iteration).str()) {
           filesystem::path old_model_file = exp_folder / filename;
           filesystem::remove(old_model_file);
         }
@@ -549,9 +590,12 @@ int main(const int argc, const char** argv) {
     // Evaluate final model
 
     agent->eval();
+    agent->to(collect_device);
     // We are using the training envs to evaluate the model because the normalization wrappers have statistics
     // that get lost if you make a new env. If you want to actually evaluate a saved model with a new env you would need
-    // to save an load those statistics as well.
+    // to save and load those statistics as well.
+    // Note the parallel envs used to eval here do not work properly if number of num_eval_runs << num_envs,
+    // because the envs with the lowest score finish first. Use num_eval_runs >= num_envs !
     auto next_obs_eval = envs->reset(config.eval_seed);
     vector<float> episodic_returns;
     while (episodic_returns.size() < config.num_eval_runs) {
@@ -567,7 +611,7 @@ int main(const int argc, const char** argv) {
       {
         if (info.has_value()) {
           auto [r, l, t] = info.value();
-          cout << format("Evaluation result: episode={} episodic_return={:.2f} \n", episodic_returns.size(), r);
+          cout << (boost::format("Evaluation result: episode=%d episodic_return=%.2f \n") % episodic_returns.size() % r).str();
           episodic_returns.push_back(r);
         }
       }
@@ -577,7 +621,7 @@ int main(const int argc, const char** argv) {
     }
     const float avg_return = reduce(episodic_returns.begin(), episodic_returns.end()) / static_cast<float>(episodic_returns.size());
     logger.add_scalar("eval/avg_return", static_cast<int>(episodic_returns.size()), avg_return);
-    cout << format("Average evaluation return={:.2f} over {} episodes", avg_return, episodic_returns.size()) << endl;
+    cout << (boost::format("Average evaluation return=%.2f over %d episodes") % avg_return % episodic_returns.size()).str();
   }
   google::protobuf::ShutdownProtobufLibrary();
 }

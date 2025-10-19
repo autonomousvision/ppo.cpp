@@ -4,13 +4,14 @@
 #include <tuple>
 #include <vector>
 #include <future>
-#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <string>
 
 #include <torch/torch.h>
-#include <ThreadPool.h>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio.hpp>
 
 using namespace std;
 using namespace torch;
@@ -283,8 +284,8 @@ private:
     vector<int> autoreset_envs_;
     vector<optional<env_info>> infos_;
     const bool clip_actions_;
-    std::unique_ptr<ThreadPool> pool_;
-    std::vector< std::future<void> > results_;
+    std::unique_ptr<boost::asio::thread_pool> pool_;
+    std::vector<std::future<void>> results_;
 
 public:
     const unsigned int num_envs_;
@@ -301,7 +302,7 @@ public:
         rewards_ = torch::zeros({num_envs_});
         terminations_ = torch::zeros({num_envs_});
         truncations_ = torch::zeros({num_envs_});
-        pool_ = make_unique<ThreadPool>(num_envs_);
+        pool_ = make_unique<boost::asio::thread_pool>(num_envs_);
     }
 
     ~ParVectorEnv() = default;
@@ -329,9 +330,31 @@ public:
         else {
             clipped_actions = actions;
         }
-        auto function_pointer = std::bind(&ParVectorEnv::forward_envs_i, this, std::placeholders::_1, std::placeholders::_2);
         for (int i = 0; i < env_array_.size(); ++i) {
-            results_.at(i) = pool_->enqueue(function_pointer, i, clipped_actions);
+            // Important to copy i by value since it will change during the loop
+            auto forward_env_i = [this, &clipped_actions, i]
+            {
+                if (autoreset_envs_[i]) {
+                    // -1 == do not reseed the environment
+                    const auto next_obs = env_array_[i]->reset(-1);
+                    obs_.slice(0, i,i+1) = next_obs;
+                    rewards_.accessor<float,1>()[i] = 0.0f;
+                    terminations_.accessor<float,1>()[i] = static_cast<float>(false);
+                    truncations_.accessor<float,1>()[i] = static_cast<float>(false);
+                    infos_[i] = nullopt;
+                    autoreset_envs_[i] = false;
+                }
+                else {
+                    auto [next_obs, reward, termination, truncation, info] = env_array_[i]->step(clipped_actions.index({i}));
+                    obs_.slice(0, i,i+1) = next_obs;
+                    rewards_.accessor<float,1>()[i] = reward;
+                    terminations_.accessor<float,1>()[i] = static_cast<float>(termination);
+                    truncations_.accessor<float,1>()[i] = static_cast<float>(truncation);
+                    infos_[i] = info;
+                    autoreset_envs_[i] = (termination or truncation);
+                }
+            };
+            results_.at(i) = boost::asio::post(pool_->get_executor(), boost::asio::use_future(forward_env_i));
         }
         // Wait until all environments are finished.
         for (int i = 0; i < env_array_.size(); ++i) {
@@ -340,29 +363,6 @@ public:
 
         return make_tuple(obs_, rewards_, terminations_, truncations_, infos_);
     }
-
-    void forward_envs_i(int i, const Tensor& clipped_actions) {
-        if (autoreset_envs_[i]) {
-            // -1 == do not reseed the environment
-            const auto next_obs = env_array_[i]->reset(-1);
-            obs_.slice(0, i,i+1) = next_obs;
-            rewards_.accessor<float,1>()[i] = 0.0f;
-            terminations_.accessor<float,1>()[i] = static_cast<float>(false);
-            truncations_.accessor<float,1>()[i] = static_cast<float>(false);
-            infos_[i] = nullopt;
-            autoreset_envs_[i] = false;
-        }
-        else {
-            auto [next_obs, reward, termination, truncation, info] = env_array_[i]->step(clipped_actions.index({i}));
-            obs_.slice(0, i,i+1) = next_obs;
-            rewards_.accessor<float,1>()[i] = reward;
-            terminations_.accessor<float,1>()[i] = static_cast<float>(termination);
-            truncations_.accessor<float,1>()[i] = static_cast<float>(truncation);
-            infos_[i] = info;
-            autoreset_envs_[i] = (termination or truncation);
-        }
-    }
-
 };
 
 #endif //GYM_H

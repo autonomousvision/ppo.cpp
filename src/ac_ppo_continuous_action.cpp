@@ -21,11 +21,9 @@
 #include <gymcpp/gym.h>
 #include <gymcpp/mujoco/humanoid_v4.h>
 #include <gymcpp/mujoco/half_cheetah_v5.h>
+#include <gymcpp/mujoco/hopper_v5.h>
+#include <gymcpp/mujoco/ant_v5.h>
 #include <gymcpp/wrappers/common.h>
-#include <gymcpp/wrappers/stateful_observation.h>
-#include <gymcpp/wrappers/transform_observation.h>
-#include <gymcpp/wrappers/stateful_reward.h>
-#include <gymcpp/wrappers/vectorize_reward.h>
 #include <distributed.h>
 #include <tcp_store.h>
 
@@ -43,46 +41,44 @@
 #include "tensorboard_logger.h"
 #include <args.hxx>
 #include <mpi.h>
+#include <GLFW/glfw3.h>
 
 using namespace std;
 using namespace torch;
 using namespace torch::indexing;
 
-shared_ptr<EnvironmentWrapper> make_env(const shared_ptr<Environment>& env_0, float gamma) {
+shared_ptr<EnvironmentWrapper> make_env(const shared_ptr<Environment>& env_0) {
   auto env_1 = make_shared<RecordEpisodeStatistics>(env_0);
-  auto env_2 = make_shared<NormalizeObservation>(env_1, env_1->get_observation_space(), kFloat32);
-  auto env_3 = make_shared<TransformObservation>(env_2, [](const Tensor& x){return torch::clamp(x, -10.0f, 10.0f);});
-  auto env_4 = make_shared<NormalizeReward>(env_3, gamma);
-  auto env_5 = make_shared<TransformReward>(env_4, [](const float x){return std::clamp(x, -10.0f, 10.0f);});
-
-  return env_5;
+  return env_1;
 }
 
 class GlobalConfig {
 public:
+  // Using Atari hyperparameters as default.
   int seed = 1;  // negative values mean no seeding will take place.
   int eval_seed = 2;  // negative values mean no seeding will take place.
-  unsigned int total_timesteps = 1'000'000;
-  float learning_rate = 3e-4;
-  unsigned int num_envs = 1;
-  unsigned int num_steps = 2048;
+  unsigned int total_timesteps = 10'000'000;
+  float learning_rate = 2.5e-4;
+  unsigned int num_envs = 8;
+  unsigned int num_steps = 128;
   float gamma = 0.99;
   float gae_lambda = 0.95;
-  unsigned int num_minibatches = 32;
-  unsigned int update_epochs = 10;
+  unsigned int num_minibatches = 4;
+  unsigned int update_epochs = 4;
   bool norm_adv = true;
-  float clip_coef = 0.2;
+  float clip_coef = 0.1;
   bool clip_vloss = true;
-  float ent_coef = 0.0;
+  float ent_coef = 0.01;
   float vf_coef = 0.5;
   float max_grad_norm = 0.5;
   float adam_eps = 1e-5;
   bool anneal_lr = true;
-  unsigned int num_eval_runs = 10;
+  unsigned int num_eval_runs = 128;
   bool clip_actions = true;
   bool torch_deterministic = true;
-  string exp_name_stem = "PPO_002"s;
-  string env_id = "Humanoid-v4"s;
+  string exp_name_stem = "Ant-v5_AC_PPO_Atari"s;
+  string env_id = "Ant-v5"s;  // Options: Humanoid-v4, Ant-v5, HalfCheetah-v5
+  string render = "rgb_array"s;  // Set to human for Visualizing the training with OpenGL, rgb_array for no visualization
   vector<int> gpu_ids = vector<int>({0});
   string collect_device = "cpu"s;  // Options: cpu, gpu
   string train_device = "cpu"s;  // Options: cpu, gpu
@@ -91,6 +87,7 @@ public:
   int use_dd_ppo_preempt = 0;  // Flag to toggle the dd_ppo pre-emption trick.
   float dd_ppo_min_perc = 0.25;  // Minimum percentage of env steps that need to finish before preemtion.
   float dd_ppo_preempt_threshold = 0.6;  // Minimum number of envs that need to finish before preemtion.
+  bool estimate_mean_std = false;  // Estimates mean and std of the run for env 0 and prints at the end.
 
   // These variables are dependent on the other variables and need to be recomputed if they change.
   unsigned int num_devices = gpu_ids.size();
@@ -106,41 +103,41 @@ public:
   [[nodiscard]] string to_string() const {
     return (boost::format("|param|value|\n"
                   "|-|-|\n"
-                  "|seed|%s|\n"
-                  "|eval_seed|%s|\n"
-                  "|total_timesteps|%s|\n"
-                  "|learning_rate|%s|\n"
-                  "|num_envs|%s|\n"
-                  "|num_steps|%s|\n"
-                  "|gamma|%s|\n"
-                  "|gae_lambda|%s|\n"
-                  "|num_minibatches|%s|\n"
-                  "|update_epochs|%s|\n"
-                  "|norm_adv|%s|\n"
-                  "|clip_coef|%s|\n"
-                  "|clip_vloss|%s|\n"
-                  "|ent_coef|%s|\n"
-                  "|vf_coef|%s|\n"
-                  "|max_grad_norm|%s|\n"
-                  "|adam_eps|%s|\n"
-                  "|anneal_lr|%s|\n"
-                  "|num_eval_runs|%s|\n"
-                  "|clip_actions|%s|\n"
+                  "|seed|%d|\n"
+                  "|eval_seed|%d|\n"
+                  "|total_timesteps|%d|\n"
+                  "|learning_rate|%f|\n"
+                  "|num_envs|%d|\n"
+                  "|num_steps|%d|\n"
+                  "|gamma|%f|\n"
+                  "|gae_lambda|%f|\n"
+                  "|num_minibatches|%u|\n"
+                  "|update_epochs|%u|\n"
+                  "|norm_adv|%d|\n"
+                  "|clip_coef|%f|\n"
+                  "|clip_vloss|%d|\n"
+                  "|ent_coef|%f|\n"
+                  "|vf_coef|%f|\n"
+                  "|max_grad_norm|%f|\n"
+                  "|adam_eps|%f|\n"
+                  "|anneal_lr|%d|\n"
+                  "|num_eval_runs|%u|\n"
+                  "|clip_actions|%d|\n"
                   "|exp_name|%s|\n"
-                  "|batch_size|%s|\n"
-                  "|minibatch_size|%s|\n"
-                  "|num_iterations|%s|\n"
-                  "|torch_deterministic|%s|\n"
+                  "|batch_size|%u|\n"
+                  "|minibatch_size|%u|\n"
+                  "|num_iterations|%u|\n"
+                  "|torch_deterministic|%d|\n"
                   "|exp_name_stem|%s|\n"
                   "|env_id|%s|\n"
                   "|collect_device|%s|\n"
                   "|train_device|%s|\n"
-                  "|num_envs_per_device|%s|\n"
-                  "|batch_size_per_device|%s|\n"
-                  "|use_dd_ppo_preempt|%s|\n"
-                  "|dd_ppo_min_perc|%s|\n"
-                  "|dd_ppo_preempt_threshold|%s|\n"
-                  "|minibatch_per_device|%s|\n")
+                  "|num_envs_per_device|%u|\n"
+                  "|batch_size_per_device|%u|\n"
+                  "|use_dd_ppo_preempt|%d|\n"
+                  "|dd_ppo_min_perc|%f|\n"
+                  "|dd_ppo_preempt_threshold|%f|\n"
+                  "|minibatch_per_device|%u|\n")
                   % seed % eval_seed % total_timesteps % learning_rate % num_envs % num_steps % gamma % gae_lambda %
                   num_minibatches % update_epochs % norm_adv % clip_coef % clip_vloss % ent_coef % vf_coef % max_grad_norm %
                   adam_eps % anneal_lr % num_eval_runs % clip_actions % exp_name % batch_size % minibatch_size %
@@ -152,52 +149,120 @@ public:
 
 class AgentImpl final : public nn::Module {
 public:
-    explicit AgentImpl(int observation_space, int action_space)
-    {
-        critic = nn::Sequential(orthogonal_init(nn::Linear(observation_space, 64)),
-            nn::Tanh(),
-            orthogonal_init(nn::Linear(64, 64)),
-            nn::Tanh(),
-            orthogonal_init(nn::Linear(64, 1), 1.0));
-        register_module("critic", critic);
+  explicit AgentImpl(int observation_space, int action_space, const float action_high, const float action_low, Tensor mean, Tensor std)
+  {
+    action_space_high = register_parameter("action_space_high"s, torch::tensor(action_high), false);
+    action_space_low = register_parameter("action_space_low"s, torch::tensor(action_low), false);
+    mean_ = register_parameter("mean_"s, mean.unsqueeze(0), false);
+    std_ = register_parameter("std_"s, std.unsqueeze(0), false);
 
-        actor_mean = nn::Sequential(orthogonal_init(nn::Linear(observation_space, 64)),
-            nn::Tanh(),
-            orthogonal_init(nn::Linear(64, 64)),
-            nn::Tanh(),
-            orthogonal_init(nn::Linear(64, action_space), 0.01));
-        register_module("actor_mean", actor_mean);
-        actor_logstd = register_parameter("actor_logstd", torch::zeros({1, action_space}, torch::kFloat32));
-    }
-    Tensor get_value(Tensor x) {
-        x = critic->forward(x);
-        return x;
-    }
+    critic = nn::Sequential(nn::Linear(observation_space, 256),
+                            nn::LayerNorm(nn::LayerNormOptions({256})),
+                            nn::ReLU(),
+                            nn::Linear(256, 256),
+                            nn::LayerNorm(nn::LayerNormOptions({256})),
+                            nn::ReLU(),
+                            nn::Linear(256, 1));
+    register_module("critic", critic);
 
-    tuple<Tensor, Tensor, Tensor, Tensor> get_action_and_value(const Tensor& x, Tensor action=at::empty({0}), const optional<Generator>& generator=nullopt) {
-        const Tensor action_mean = actor_mean->forward(x);
-        const Tensor action_logstd = actor_logstd.expand_as(action_mean);
-        const Tensor action_std = torch::exp(action_logstd);
-        const Normal probs(action_mean, action_std);
-        if (action.data_ptr() == nullptr) {
-            action = probs.sample(generator);
+    actor_encoder = nn::Sequential(
+        nn::Linear(observation_space, 256),
+        nn::LayerNorm(nn::LayerNormOptions({256})),
+        nn::ReLU(),
+        nn::Linear(256, 256),
+        nn::LayerNorm(nn::LayerNormOptions({256})),
+        nn::ReLU()
+    );
+    register_module("actor_mean", actor_encoder);
+
+    dist_alpha = nn::Sequential(
+      nn::Linear(256, action_space)
+    );
+    register_module("dist_alpha", dist_alpha);
+
+    dist_beta = nn::Sequential(
+      nn::Linear(256, action_space)
+    );
+    register_module("dist_beta", dist_beta);
+  }
+  Tensor get_value(const Tensor& x) {
+    Tensor normalized_x = (x - mean_) / std_;
+    normalized_x = critic->forward(normalized_x);
+    return normalized_x;
+  }
+
+  Tensor scale_action(const Tensor& action) const {
+    // Values are specific to beta distribution
+    constexpr float d_low = 0.0f;
+    constexpr float d_high = 1.0f;
+    constexpr float eps = 1e-7;
+
+    Tensor scaled_action = (action - action_space_low) / (action_space_high - action_space_low) * (d_high - d_low) + d_low;
+    scaled_action = torch::clamp(scaled_action, d_low + eps, d_high + eps);
+    return scaled_action;
+  }
+
+  Tensor unscale_action(const Tensor& action) const {
+    // Values are specific to beta distribution
+    constexpr float d_low = 0.0f;
+    constexpr float d_high = 1.0f;
+    return (action - d_low) / (d_high - d_low) * (action_space_high - action_space_low) + action_space_low;
+  }
+
+  tuple<Tensor, Tensor, Tensor, Tensor> get_action_and_value(const Tensor& x, Tensor action=at::empty({0}),
+    const string sample_type="sample"s, const optional<Generator>& generator=nullopt)
+  {
+    Tensor normalized_x = (x - mean_) / std_;
+    Tensor actor_features = actor_encoder->forward(normalized_x);
+    Tensor alpha = dist_alpha->forward(actor_features);
+    Tensor beta = dist_beta->forward(actor_features);
+
+    alpha = nn::functional::softplus(alpha) + 1.0f;
+    beta = nn::functional::softplus(beta) + 1.0f;
+
+    const Beta probs(alpha, beta);
+
+    if (action.data_ptr() == nullptr) {
+        if (sample_type == "sample"s) {
+          action = probs.sample(generator);
         }
-        Tensor logprob = probs.log_prob(action).sum(1);
-        Tensor entropy = probs.entropy().sum(1);
-        Tensor value = critic->forward(x);
-        return make_tuple(action, logprob, entropy, value);
-    }
-protected:
-    static nn::Linear orthogonal_init(nn::Linear linear, const double std=std::sqrt(2.0), const float bias_const=0.0) {
-        NoGradGuard noGrad;
-        nn::init::orthogonal_(linear->weight, std);
-        nn::init::constant_(linear->bias, bias_const);
-        return linear;
+        else if (sample_type == "mean"s) {
+          action = probs.mean();
+        }
+        else if (sample_type == "roach"s) {
+          action = probs.roach_deterministic();
+        }
+        else {
+          throw runtime_error("Unsupported sample type used. Sample type: "s + sample_type);
+        }
+      }
+    else {
+      action = scale_action(action);
     }
 
-    nn::Sequential critic{nullptr};
-    nn::Sequential actor_mean{nullptr};
-    Tensor actor_logstd;
+    Tensor logprob = probs.log_prob(action).sum(1);
+    action = unscale_action(action);
+
+    Tensor entropy = probs.entropy().sum(1);
+    Tensor value = critic->forward(normalized_x);
+    return make_tuple(action, logprob, entropy, value);
+  }
+protected:
+  static nn::Linear orthogonal_init(nn::Linear linear, const double std=std::sqrt(2.0), const float bias_const=0.0) {
+    NoGradGuard noGrad;
+    nn::init::orthogonal_(linear->weight, std);
+    nn::init::constant_(linear->bias, bias_const);
+    return linear;
+  }
+
+  nn::Sequential critic{nullptr};
+  nn::Sequential actor_encoder{nullptr};
+  nn::Sequential dist_alpha{nullptr};
+  nn::Sequential dist_beta{nullptr};
+  Tensor action_space_high;
+  Tensor action_space_low;
+  Tensor mean_;
+  Tensor std_;
 };
 
 TORCH_MODULE(Agent);
@@ -212,15 +277,23 @@ void save_state(const Agent& agent, const optim::Adam& optimizer, const filesyst
 }
 
 // main function
-// For multi-device training start the program with: mpirun -n 2 --bind-to none gs_ppo_carla
+// For multi-device training start the program with: mpirun -n 2 --bind-to none ac_ppo_carla
 int main(const int argc, const char** argv) {
-  auto program_location = filesystem::canonical("/proc/self/exe"); // Linux only
-  std::string directory = std::filesystem::path(program_location).parent_path().string();
+  filesystem::path exe = filesystem::canonical(argv[0]);
+  filesystem::path basedir = exe.parent_path();
+  std::string directory = basedir.string();
   cout << "Location of program: " << directory << endl;
   ios_base::sync_with_stdio(false);  // Faster print
   // Can be slightly faster to turn off multi-threading in libtorch. Might depend on model size.
   torch::set_num_threads(1);
   torch::set_num_interop_threads(1);
+#ifdef _WIN32
+  _putenv_s("OMP_NUM_THREADS", "1");
+  _putenv_s("MKL_NUM_THREADS", "1");
+#else
+  setenv("OMP_NUM_THREADS", "1", 1);
+  setenv("MKL_NUM_THREADS", "1", 1);
+#endif
 
   // Initialize the MPI anc NCCL environment
   int rank;
@@ -255,6 +328,7 @@ int main(const int argc, const char** argv) {
   args::ValueFlag torch_deterministic(parser, "torch_deterministic", "Whether to use deterministic cuda algorithms", {"torch_deterministic"}, config.torch_deterministic);
   args::ValueFlag exp_name_stem(parser, "exp_name_stem", "Name of the experiment.", {"exp_name_stem"}, config.exp_name_stem);
   args::ValueFlag env_id(parser, "env_id", "Name of the mujoco env to be executed.", {"env_id"}, config.env_id);
+  args::ValueFlag render(parser, "render", "Set to human for Visualizing the training with OpenGL, rgb_array for no visualization", {"render"}, config.render);
   args::ValueFlag num_envs(parser, "num_envs", "Number of environments to be used.", {"num_envs"}, config.num_envs);
   args::ValueFlagList<int> gpu_ids(parser, "gpu_ids", "The ids of the GPUs used for training. Len of this list determines the number of devices."
                                                                "Usage: --gpu_ids 0 --gpu_ids 1 --gpu_ids 2 ...", {"gpu_ids"}, config.gpu_ids);
@@ -265,6 +339,7 @@ int main(const int argc, const char** argv) {
   args::ValueFlag use_dd_ppo_preempt(parser, "use_dd_ppo_preempt", "Flag to toggle the dd_ppo pre-emption trick", {"use_dd_ppo_preempt"}, config.use_dd_ppo_preempt);
   args::ValueFlag dd_ppo_min_perc(parser, "dd_ppo_min_perc", "Percentage of envs that need to finish before preemtion.", {"dd_ppo_min_perc"}, config.dd_ppo_min_perc);
   args::ValueFlag dd_ppo_preempt_threshold(parser, "dd_ppo_preempt_threshold", "Percentage of envs that need to finish before preemtion.", {"dd_ppo_preempt_threshold"}, config.dd_ppo_preempt_threshold);
+  args::ValueFlag estimate_mean_std(parser, "estimate_mean_std", "Percentage of envs that need to finish before preemtion.", {"estimate_mean_std"}, config.estimate_mean_std);
 
 
   try
@@ -307,6 +382,7 @@ int main(const int argc, const char** argv) {
   config.torch_deterministic = args::get(torch_deterministic);
   config.exp_name_stem = args::get(exp_name_stem);
   config.env_id = args::get(env_id);
+  config.render = args::get(render);
   config.num_envs = args::get(num_envs);
   config.gpu_ids = args::get(gpu_ids);
   config.collect_device = args::get(collect_device);
@@ -316,6 +392,7 @@ int main(const int argc, const char** argv) {
   config.use_dd_ppo_preempt = args::get(use_dd_ppo_preempt);
   config.dd_ppo_min_perc = args::get(dd_ppo_min_perc);
   config.dd_ppo_preempt_threshold = args::get(dd_ppo_preempt_threshold);
+  config.estimate_mean_std = args::get(estimate_mean_std);
 
   // Need to recompute them as the value might have changed
   config.num_devices = world_size;  // TODO think about how to do this with multi-node
@@ -335,7 +412,7 @@ int main(const int argc, const char** argv) {
   cout << "rank: " << rank << "\n";
   cout << "local_rank: " << local_rank << endl;
 
-  filesystem::path exp_folder(directory + "/../models"s);
+  filesystem::path exp_folder(basedir / ".." / "models");
   exp_folder = exp_folder / config.exp_name;
   filesystem::create_directories(exp_folder);
 
@@ -402,22 +479,58 @@ int main(const int argc, const char** argv) {
 
   vector<shared_ptr<SeqVectorEnv>> envs;
 
+  Tensor observation_mean;
+  Tensor observation_std;
+
   if (config.env_id == "Humanoid-v4") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "humanoid.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs_per_device; ++i) {
       std::vector<shared_ptr<EnvironmentWrapper>> env_array;
 
-      auto env_0 = make_shared<HumanoidV4Env>(directory + "/../libs/gymcpp/mujoco/assests/humanoid.xml", "rgb_array");
-      env_array.push_back(make_env(env_0, config.gamma));
+      auto env_0 = make_shared<HumanoidV4Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0));
       envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
     }
+    observation_mean = torch::tensor({1.2067, 0.9201, -0.1168, -0.1367, 0.0888, -0.1257, 0.3312, 0.3262, 0.0628, 0.3241, 0.2047, -0.0534, 0.0014, 0.3436, -0.2829, -0.0991, 0.6670, -0.6024, -0.7289, -0.3202, 0.7680, -0.4821, 0.3625, 0.0331, -0.2775, -0.1132, -0.2253, -0.0627, -0.0480, 0.2474, 0.1203, 0.0065, 0.1339, 0.0812, -0.1305, -0.0386, 0.2401, -0.1599, -0.1570, 0.4250, -0.3941, -0.7164, -0.2651, 0.5239, -0.5930, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 2.0507, 2.0406, 0.2368, 0.0292, 0.1744, -0.1379, -0.3409, 0.2869, 4.0142, 8.9075, 0.1085, 0.1027, 0.0203, 0.0014, -0.0071, 0.0113, 0.0361, -0.0522, 0.4558, 2.2619, 0.0841, 0.0564, 0.0785, 0.0005, 0.0013, 0.0064, -0.0332, -0.1863, 0.3131, 6.6162, 0.2483, 0.2109, 0.0874, -0.0054, -0.0251, -0.0668, -0.0873, -0.4644, -0.7548, 4.7518, 0.7999, 0.8191, 0.1109, -0.0123, -0.1377, -0.0971, -0.2662, -0.1974, -1.4102, 2.7557, 0.9059, 0.9410, 0.1227, -0.0090, -0.1667, -0.0735, -0.2495, -0.1086, -1.2281, 1.7671, 0.1803, 0.1852, 0.0773, -0.0096, 0.0345, 0.0400, 0.2252, 0.2988, -0.6201, 4.7518, 0.7009, 0.7702, 0.1624, -0.0119, 0.1354, 0.0968, 0.3330, 0.1942, -1.2986, 2.7557, 0.8167, 0.8956, 0.1777, -0.0078, 0.1468, 0.0965, 0.2681, 0.1417, -1.1489, 1.7671, 0.3601, 0.3185, 0.0839, 0.0048, -0.0022, 0.1013, 0.0089, -0.2631, 0.6819, 1.6611, 0.1679, 0.1529, 0.1146, 0.0274, -0.0451, 0.0539, 0.1662, -0.2379, 0.2808, 1.2295, 0.2650, 0.2283, 0.1157, 0.0157, 0.0265, -0.0974, -0.1027, 0.3202, 0.5252, 1.6611, 0.1486, 0.1315, 0.1269, -0.0074, -0.0305, -0.0405, 0.0424, 0.2681, 0.1897, 1.2295, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, -0.2181, -0.1105, -0.1053, 0.4110, -0.0397, -0.2029, -0.1152, 0.0918, -0.1766, 0.3631, -0.0147, -0.2006, 0.0214, 0.0575, -0.1637, 0.3679, 0.0034, -0.1822, -0.0591, 0.1322, 0.0098, 0.3472, 0.0138, -0.1843, -0.1156, 0.2339, 0.0411, 0.3836, 0.0381, -0.1935, -0.1156, 0.2339, 0.0411, 0.3836, 0.0381, -0.1935, 0.0466, -0.0779, -0.4843, 0.3511, -0.0037, -0.1815, 0.0758, 0.0612, -0.4836, 0.4064, -0.0132, -0.1862, 0.0758, 0.0612, -0.4836, 0.4064, -0.0132, -0.1862, 0.2557, 0.5031, -0.2566, 0.0992, 0.1956, -0.2359, -0.0884, 0.9220, -0.5763, 0.0649, 0.0985, -0.3221, -0.4464, 0.4929, -0.1611, 0.1485, -0.1382, -0.2348, -0.5712, 0.9898, -0.1302, 0.0953, -0.1208, -0.3205, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, -1.7708, 8.0737, 1.9869, 6.1523, 13.2124, 28.5278, 37.2543, 3.3135, 6.6229, 4.4404, 26.5631, -0.0497, -0.4320, -0.0597, -0.1960, 0.0591, 0.7946, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, -0.0015, -0.0808, 0.0028, -0.1954, 0.0011, -0.1048, -0.0994, -0.1408, -0.0357, -0.6195, 0.5659, -0.7131, 0.0025, -0.0035, -0.0054, -0.0974, -0.0165, -0.1257, -0.0998, 0.0306, -0.0076, -0.1546, -0.3981, -0.0144, -0.0059, 0.0008, -0.0002, -0.0016, -0.0133, -0.0014, -3.7099, 13.0694, -0.4196, 18.7501, 6.8694, 239.8089, 0.1006, -0.0288, 0.0039, 0.1301, 0.3542, -0.0258, 0.0092, 0.0020, -0.0001, -0.0018, 0.0168, 0.0080, 4.1156, -11.8467, -0.6581, -6.3820, -6.1693, 154.1199, 0.0032, 0.0185, 0.0066, 0.0721, -0.0660, 0.1900, 0.1546, 0.1605, 0.0459, 0.6995, -0.8975, 0.5440, -0.0002, 0.0063, -0.0032, 0.0268, 0.0231, 0.0600, -0.0599, 0.0381, -0.0072, 0.1407, 0.4348, 0.1967}, dtype(kFloat).requires_grad(false));
+    observation_std = torch::tensor({0.0838, 0.0786, 0.1742, 0.1637, 0.2235, 0.2485, 0.3006, 0.3639, 0.0661, 0.2727, 0.2045, 0.1338, 0.1081, 0.2391, 0.4400, 0.2078, 0.4106, 0.4370, 0.7245, 0.3611, 0.5052, 0.7217, 0.5590, 0.5931, 0.4081, 1.2603, 1.5436, 2.0705, 2.5298, 2.3992, 1.7899, 1.2342, 2.8975, 2.6135, 3.0877, 2.1655, 3.2730, 3.6635, 4.9855, 2.0595, 2.4454, 2.8886, 2.0891, 2.7278, 2.8454, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.2180, 0.2182, 0.2212, 0.0987, 0.3376, 0.3503, 0.7600, 0.8071, 0.3076, 0.0000, 0.0178, 0.0186, 0.0139, 0.0063, 0.0190, 0.0220, 0.0959, 0.1110, 0.0441, 0.0000, 0.0280, 0.0254, 0.0266, 0.0167, 0.0144, 0.0177, 0.2501, 0.2898, 0.1319, 0.0000, 0.0431, 0.0412, 0.0456, 0.0254, 0.0405, 0.0328, 0.2523, 0.2119, 0.1462, 0.0000, 0.0985, 0.1024, 0.1160, 0.0542, 0.1478, 0.1315, 0.3092, 0.2812, 0.1266, 0.0000, 0.1108, 0.1067, 0.1332, 0.0617, 0.1697, 0.1537, 0.2713, 0.2494, 0.1080, 0.0000, 0.0577, 0.0339, 0.0491, 0.0241, 0.0412, 0.0339, 0.2796, 0.2201, 0.1582, 0.0000, 0.1759, 0.0934, 0.1608, 0.0641, 0.1777, 0.1296, 0.4397, 0.2862, 0.2151, 0.0000, 0.1931, 0.1023, 0.1839, 0.0715, 0.2108, 0.1514, 0.3890, 0.2525, 0.1804, 0.0000, 0.0765, 0.0713, 0.0474, 0.0294, 0.0640, 0.0649, 0.1749, 0.1646, 0.1178, 0.0000, 0.1063, 0.1146, 0.0549, 0.0373, 0.0596, 0.0503, 0.1657, 0.1387, 0.2017, 0.0000, 0.0884, 0.0760, 0.0486, 0.0412, 0.0614, 0.0495, 0.2229, 0.1427, 0.1390, 0.0000, 0.0963, 0.1078, 0.0595, 0.0527, 0.0601, 0.0524, 0.2439, 0.1162, 0.2245, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 1.3468, 1.6557, 1.9246, 0.6424, 0.6251, 0.3845, 1.3868, 1.8024, 2.1527, 0.4451, 0.5707, 0.3692, 1.3040, 1.7927, 2.1730, 0.4268, 0.4694, 0.3656, 1.3557, 1.6341, 3.2462, 0.5427, 0.4880, 0.3626, 1.4846, 1.8916, 3.2423, 1.0402, 0.7554, 0.4889, 1.4846, 1.8916, 3.2423, 1.0402, 0.7554, 0.4889, 1.8360, 2.4584, 3.4402, 0.4857, 0.4831, 0.3985, 1.9953, 2.9820, 3.5171, 1.4613, 0.9335, 0.8695, 1.9953, 2.9820, 3.5171, 1.4613, 0.9335, 0.8695, 1.8673, 2.3263, 1.9583, 1.2115, 0.9559, 0.4748, 2.0948, 2.7284, 2.1195, 1.2116, 0.9518, 0.5800, 1.8253, 2.2696, 2.3032, 1.0659, 0.8993, 0.5105, 2.0049, 2.9582, 2.4394, 1.0604, 0.9027, 0.6122, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.6812, 0.1127, 1.3318, 1.4458, 9.2671, 3.6582, 1.1704, 1.0806, 0.5137, 0.7694, 6.0397, 5.4231, 5.4939, 5.3830, 5.4752, 5.3715, 5.4023, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.1086, 1.3705, 0.3843, 3.2683, 2.8190, 2.3140, 1.6833, 1.4983, 0.6813, 6.6424, 8.5245, 7.0875, 0.2368, 0.2138, 0.3039, 3.1042, 3.0361, 3.0391, 3.1869, 1.7751, 0.9081, 7.0531, 13.2572, 4.6236, 0.7359, 0.3876, 0.1618, 0.9006, 1.7000, 0.6539, 44.9869, 57.8573, 12.3572, 76.7473, 60.8978, 279.5875, 3.1967, 1.7859, 0.9243,7.2009, 13.4145, 4.7449, 1.0385, 0.6452, 0.2391, 1.0946, 1.8960, 1.4966, 35.4017, 51.5872, 11.9319, 76.3289, 59.8354, 299.4579, 0.3642, 0.5474, 0.2621, 2.3356, 2.2154, 4.2920, 1.6720, 1.7124, 0.6763, 6.7303, 7.9297, 5.3757, 0.2708, 0.3514, 0.1830, 1.4793, 1.4129, 2.3110, 1.0881, 0.9243, 0.4474, 4.0738, 5.1913, 3.3184}, dtype(kFloat).requires_grad(false));
   }
   else if (config.env_id == "HalfCheetah-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "half_cheetah.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
     for (int i = 0; i < config.num_envs_per_device; ++i) {
       std::vector<shared_ptr<EnvironmentWrapper>> env_array;
-      auto env_0 = make_shared<HalfCheetahV5Env>(directory + "/../libs/gymcpp/mujoco/assests/half_cheetah.xml", "rgb_array");
-      env_array.push_back(make_env(env_0, config.gamma));
+      auto env_0 = make_shared<HalfCheetahV5Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0));
       envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
     }
+    // TODO estimate
+    observation_mean = torch::zeros({envs[0]->get_observation_space()}, dtype(kFloat).requires_grad(false));
+    observation_std = torch::ones({envs[0]->get_observation_space()}, dtype(kFloat).requires_grad(false));
+  }
+  else if (config.env_id == "Ant-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "ant.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
+    for (int i = 0; i < config.num_envs_per_device; ++i) {
+      std::vector<shared_ptr<EnvironmentWrapper>> env_array;
+      auto env_0 = make_shared<AntV5Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0));
+      envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
+    }
+    observation_std = torch::tensor({0.1457, 0.3284, 0.2356, 0.2533, 0.2465, 0.4133, 0.2276, 0.3176, 0.1543, 0.4031, 0.1743, 0.3922, 0.2557, 1.7925, 0.8815, 1.0024, 1.1423, 1.2915, 1.1746, 5.1470, 2.7205, 2.5965, 1.3809, 5.1394, 1.5694, 3.1544, 3.2665, 0.1580, 0.1582, 0.0336, 0.2323, 0.2323, 0.2680, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.0473, 0.0478, 0.0466, 0.0521, 0.0522, 0.0564, 0.2816, 0.2806, 0.2776, 0.2871, 0.2872, 0.2835, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.0495, 0.0491, 0.0474, 0.0540, 0.0540, 0.0586, 0.2308, 0.2317, 0.2256, 0.2332, 0.2323, 0.2355, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.0478, 0.0479, 0.0465, 0.0523, 0.0522, 0.0568, 0.2985, 0.2952, 0.2994, 0.3057, 0.3040, 0.2995, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 1.0000, 0.0475, 0.0475, 0.0463, 0.0521, 0.0521, 0.0568, 0.1716, 0.1743, 0.1647, 0.1770, 0.1756, 0.1800}, dtype(kFloat).requires_grad(false));
+    observation_mean = torch::tensor({ 0.5450, 0.8056, 0.0048, -0.0222, 0.2493, -0.0541, 0.7024, -0.3042, -0.5781, 0.0793, -0.5972, 0.0423, 0.7128, 2.6974, -0.0774, 0.0041, 0.0080, -0.0116, 0.0058, -0.0149, 0.0318, 0.0159, -0.0370, 0.0117, -0.0387, 0.0010, 0.0324, -0.0006, 0.0005, -0.0001, 0.0003, -0.0002, 0.0779, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0003, -0.0000, 0.0001, -0.0000, -0.0001, 0.0033, 0.0778, -0.0441, -0.0437, 0.0337, 0.0069, 0.0885, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0001, -0.0002, 0.0001, -0.0001, 0.0000, 0.0035, 0.0318, 0.0467, -0.0031, -0.0335, 0.0115, 0.0594, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, -0.0003, -0.0001, -0.0001, -0.0000, 0.0001, 0.0033, -0.0889, 0.0038, 0.0318, 0.0173, -0.0123, 0.1002, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0001, 0.0000, 0.0001, 0.0001, 0.0033, -0.0066, -0.0232, -0.0003, -0.0066, 0.0009, 0.0337}, dtype(kFloat).requires_grad(false));
+  }
+  else if (config.env_id == "Hopper-v5") {
+    filesystem::path mujoco_xml = basedir / "mujoco" / "assets" / "hopper.xml";
+    cout << "Loading file: " << mujoco_xml.string() << endl;
+    for (int i = 0; i < config.num_envs_per_device; ++i) {
+      std::vector<shared_ptr<EnvironmentWrapper>> env_array;
+      auto env_0 = make_shared<HopperV5Env>(mujoco_xml.string(), config.render);
+      env_array.push_back(make_env(env_0));
+      envs.push_back(make_shared<SeqVectorEnv>(env_array, config.clip_actions));
+    }
+    observation_mean = torch::tensor({1.2739, 0.0315, -0.4293, -0.1627, 0.1548, 2.3837, -0.1428, 0.0132, -0.3067, -0.1605, 0.0042}, dtype(kFloat).requires_grad(false));
+    observation_std = torch::tensor({0.1744, 0.0657, 0.2552, 0.2478, 0.5991, 0.9265, 1.3565, 0.8800, 1.9136, 2.6953, 5.9598}, dtype(kFloat).requires_grad(false));
   }
   else
   {
@@ -425,7 +538,9 @@ int main(const int argc, const char** argv) {
     return 1;
   }
 
-  auto agent = Agent(envs[0]->get_observation_space(), envs[0]->get_action_space());
+  auto agent = Agent(envs[0]->get_observation_space(), envs[0]->get_action_space(),
+                     envs[0]->get_action_space_max(), envs[0]->get_action_space_min(),
+                     observation_mean, observation_std);
 
   const filesystem::path model_path = exp_folder / "model_intial.pth"s;
 
@@ -478,6 +593,9 @@ int main(const int argc, const char** argv) {
 
   Tensor next_obs  = torch::zeros({config.num_envs_per_device, envs[0]->get_observation_space()}, collect_devices);
   Tensor next_done = torch::zeros({config.num_envs_per_device}, collect_devices);
+
+  // Stores obs of the run.
+  std::vector<Tensor> obs_mean_std;
 
   // When running the agent in parallel we need to have each agent use its own seed generator, to ensure exact reproducibility.
   vector<Generator> agent_generators;
@@ -533,14 +651,17 @@ int main(const int argc, const char** argv) {
           dones.index({step, i}) = next_done.index({i});
 
           Tensor action, logprob, entropy, value, done;
-          tie(action, logprob, entropy, value) = agent->get_action_and_value(next_obs.index({i}).unsqueeze(0).to(collect_devices), at::empty({0}), agent_generators[i]);
+          tie(action, logprob, entropy, value) = agent->get_action_and_value(next_obs.index({i}).unsqueeze(0).to(collect_devices), at::empty({0}), "sample", agent_generators[i]);
 
           values.index({step}).slice(0, i,i+1) = value.squeeze(0);
           actions.index({step, i}) = action.squeeze(0);
           logprobs.index({step, i}) = logprob.index({0});
 
           auto [env_next_obs, reward, termination, truncation, infos] = envs[i]->step(action.to(kCPU));
-
+          // Store states for estimating mean and std at the end.
+          if (i == 0 && config.estimate_mean_std) {
+            obs_mean_std.push_back(env_next_obs.index({0}).clone());
+          }
           done = torch::logical_or(termination, truncation).to(kFloat32);
 
           rewards.index({step, i}) = reward.index({0}).to(collect_devices);
@@ -592,6 +713,11 @@ int main(const int argc, const char** argv) {
       }
     }
 
+    if (config.render == "human"s) {
+      // The main thread need to occasionally call this, otherwise the OS thinks the rendering windows are unresponsive.
+      // Not threadsafe, so we cannot call it from the data collection threads.
+      glfwPollEvents();
+    }
     int num_train_steps_per_env = min_collected_steps;
 
     // Average values across processes for logging.
@@ -686,7 +812,7 @@ int main(const int argc, const char** argv) {
         int end = start + config.minibatch_per_device;
 
         Tensor mb_inds = b_inds.index({Slice(start, end, 1)});
-        auto [action, newlogprob, entropy, newvalue] = agent->get_action_and_value(b_obs.index({mb_inds}), b_actions.index({mb_inds}));
+        auto [action, newlogprob, entropy, newvalue] = agent->get_action_and_value(b_obs.index({mb_inds}), b_actions.index({mb_inds}), "sample"s);
         Tensor logratio = newlogprob - b_logprobs.index({mb_inds});
         Tensor ratio = logratio.exp();
 
@@ -751,7 +877,9 @@ int main(const int argc, const char** argv) {
         std::vector<Tensor> grads;
         grads.reserve(agent->parameters().size());
         for (const auto& p : agent->parameters()) {
-          grads.push_back(p.grad());
+          if(p.requires_grad()) {
+            grads.push_back(p.grad().contiguous());
+          }
         }
         comm->allreduce(grads, true);
 
@@ -823,6 +951,16 @@ int main(const int argc, const char** argv) {
     save_state(agent, optimizer, exp_folder, "model_final.pth"s, "optimizer_final.pth"s);
   }
 
+  // Uncomment when estimating mean and std.
+  if (config.estimate_mean_std) {
+    auto stacked = torch::stack(obs_mean_std, 0);
+    auto mean_builtin = torch::mean(stacked, 0);
+    auto std_builtin  = torch::std(stacked, 0, /*unbiased=*/false); // population std
+
+    std::cout << "Mean obs:\n" << mean_builtin << "\n\n";
+    std::cout << "Std obs:\n" << std_builtin << "\n" << std::endl;
+  }
+
   if (rank == 0)
   { // no grad
     NoGradGuard no_grad;
@@ -839,7 +977,7 @@ int main(const int argc, const char** argv) {
       Tensor action;
       {
         Tensor entropy, done, logprob, value; // Don't need this variable. Will be deleted once left scope.
-        tie(action, logprob, entropy, value) = agent->get_action_and_value(next_obs_eval.to(train_devices));
+        tie(action, logprob, entropy, value) = agent->get_action_and_value(next_obs_eval.to(train_devices),  at::empty({0}), "mean"s);
       }
       auto [env_next_obs, reward, termination, truncation, infos] = envs[0]->step(action.to(kCPU));
 

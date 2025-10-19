@@ -129,7 +129,7 @@ public:
 
   // These variables are dependent on the other variables and need to be recomputed if they change.
   int num_devices = static_cast<int>(gpu_ids.size());
-  string exp_name = (boost::format("%s_%s") % "PPO_002"s % seed).str();
+  string exp_name = (boost::format("%s_%d") % "PPO_002"s % seed).str();
   int batch_size {num_steps * num_envs};
   int minibatch_size {batch_size / num_minibatches};
   int num_iterations {total_timesteps / batch_size};

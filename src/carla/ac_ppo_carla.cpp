@@ -73,7 +73,7 @@ void save_state(const Agent& agent, const optim::Adam& optimizer, const filesyst
 }
 
 // main function
-// For multi-device training start the program with: mpirun -n 2 --bind-to none gs_ppo_carla
+// For multi-device training start the program with: mpirun -n 2 --bind-to none ac_ppo_carla
 int main(int argc, char** argv) {
   ios_base::sync_with_stdio(false);  // Faster print
   // TODO tune for CALRA Can be slightly faster to turn off multi-threading in libtorch. Might depend on model size.

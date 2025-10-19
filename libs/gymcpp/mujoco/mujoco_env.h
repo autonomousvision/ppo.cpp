@@ -6,6 +6,7 @@
 
 #include <GLFW/glfw3.h>
 #include <mujoco/mujoco.h>
+#include <torch/torch.h>
 
 using namespace std;
 
@@ -27,66 +28,7 @@ public:
     mjvOption opt;                      // visualization options
     mjvScene scn;                       // abstract scene
     mjrContext con;                     // custom GPU context
-
-    // mouse interaction
-    bool button_left = false;
-    bool button_middle = false;
-    bool button_right =  false;
-    double lastx = 0;
-    double lasty = 0;
-
-    // mouse button callback
-    void mouse_button(GLFWwindow* window, int button, int act, int mods) {
-        // update button state
-        button_left = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS);
-        button_middle = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE)==GLFW_PRESS);
-        button_right = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)==GLFW_PRESS);
-
-        // update mouse position
-        glfwGetCursorPos(window, &lastx, &lasty);
-    }
-
-    // mouse move callback
-    void mouse_move(GLFWwindow* window, const double xpos, const double ypos) {
-        // no buttons down: nothing to do
-        if (!button_left && !button_middle && !button_right) {
-            return;
-        }
-
-        // compute mouse displacement, save
-        const double dx = xpos - lastx;
-        const double dy = ypos - lasty;
-        lastx = xpos;
-        lasty = ypos;
-
-        // get current window size
-        int width, height;
-        glfwGetWindowSize(window, &width, &height);
-
-        // get shift key state
-        const bool mod_shift = (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)==GLFW_PRESS ||
-                                glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT)==GLFW_PRESS);
-
-        // determine action based on mouse button
-        mjtMouse action;
-        if (button_right) {
-            action = mod_shift ? mjMOUSE_MOVE_H : mjMOUSE_MOVE_V;
-        } else if (button_left) {
-            action = mod_shift ? mjMOUSE_ROTATE_H : mjMOUSE_ROTATE_V;
-        } else {
-            action = mjMOUSE_ZOOM;
-        }
-
-        // move camera
-        mjv_moveCamera(model_, action, dx/height, dy/height, &scn, &cam);
-    }
-
-
-    // scroll callback
-    void scroll(GLFWwindow* window, double xoffset, const double yoffset) {
-        // emulate vertical mouse motion = 5% of window height
-        mjv_moveCamera(model_, mjMOUSE_ZOOM, 0, -0.05*yoffset, &scn, &cam);
-    }
+    mjrRect viewport = {0, 0, 0, 0};
 
     MujocoEnv(const string& xml, const int frame_skip, const bool post_constraint, const string& render_mode="rgb_array"s):
         model_(mj_loadXML(xml.c_str(), NULL, NULL, 0)),
@@ -113,29 +55,17 @@ public:
             // create window, make OpenGL context current, request v-sync
             window = glfwCreateWindow(640, 480, "Demo", nullptr, nullptr);
             glfwMakeContextCurrent(window);
-            glfwSwapInterval(1);
+            glfwSwapInterval(0);  // 1 = vsync, 0 = no vsync
 
             glfwSetWindowUserPointer(window, this);
 
-            auto func = [](GLFWwindow* w, const int button, const int act, const int mods)
-            {
-                static_cast<MujocoEnv*>(glfwGetWindowUserPointer(w))->mouse_button(w, button, act, mods);
-            };
-            auto func2 = [](GLFWwindow* w, const double xoffset, const double yoffset)
-            {
-                static_cast<MujocoEnv*>(glfwGetWindowUserPointer(w))->scroll(w, xoffset, yoffset);
-            };
-            auto func3 = [](GLFWwindow* w, const double xpos, const double ypos)
-            {
-                static_cast<MujocoEnv*>(glfwGetWindowUserPointer(w))->mouse_move(w, xpos, ypos);
-            };
-
-            glfwSetMouseButtonCallback(window, func);
-            glfwSetScrollCallback(window, func2);
-            glfwSetCursorPosCallback(window, func3);
+            // get framebuffer viewport
+            glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
 
             // initialize visualization data structures
             mjv_defaultCamera(&cam);
+            // Camera type should be mjCAMERA_TRACKBALL
+            cam.type = 0;
             mjv_defaultOption(&opt);
             mjv_defaultScene(&scn);
             mjr_defaultContext(&con);
@@ -143,6 +73,9 @@ public:
             // create scene and context
             mjv_makeScene(model_, &scn, 2000);
             mjr_makeContext(model_, &con, mjFONTSCALE_150);
+
+            // Release context since we might be switching to other threads later.
+            glfwMakeContextCurrent(nullptr);
         }
     }
 
@@ -153,9 +86,7 @@ public:
             mjv_freeScene(&scn);
             mjr_freeContext(&con);
             // terminate GLFW (crashes with Linux NVidia drivers)
-#if defined(__APPLE__) || defined(_WIN32)
             glfwTerminate();
-#endif
         }
         mj_deleteData(data_);
         mj_deleteModel(model_);
@@ -179,19 +110,27 @@ public:
         if (render_mode_ == "human"s) {
             glfwMakeContextCurrent(window);
 
-            // get framebuffer viewport
-            mjrRect viewport = {0, 0, 0, 0};
-            glfwGetFramebufferSize(window, &viewport.width, &viewport.height);
+            // Get target body position
+            mjtNum target_pos[3];
+            mju_copy3(target_pos, data_->qpos);
 
+            // Update camera lookat point
+            cam.lookat[0] = target_pos[0];
+            cam.lookat[1] = target_pos[1];
+            cam.lookat[2] = 0.5;
+
+            cam.distance = 5.0;
+            cam.azimuth = 90;    // Side view
+            cam.elevation = 0;   // Horizontal
+            glfwPostEmptyEvent();  // Thread-safe! Wakes up glfwWaitEvents()
             // update scene and render
             mjv_updateScene(model_, data_, &opt, nullptr, &cam, mjCAT_ALL, &scn);
             mjr_render(viewport, &scn, &con);
 
             // swap OpenGL buffers (blocking call due to v-sync)
             glfwSwapBuffers(window);
-
-            // process pending GUI events, call GLFW callbacks
-            glfwPollEvents();
+            // Seems to be important when doing multi-threaded rendering.
+            glfwMakeContextCurrent(nullptr);
         }
     }
 };
