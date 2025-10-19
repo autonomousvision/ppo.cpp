@@ -7,9 +7,12 @@ The idea is described in Appendix B.1 of this [paper](https://arxiv.org/abs/2504
 
 To run the training and evaluation of with the CARLA leaderboard 2.0, you also need to download and set up the [CaRL repo](https://github.com/autonomousvision/CaRL).
 
+We welcome pull request for more gymnasium environments or other translated CleanRL algorithms.
+
 ## Setup
 To most convenient way to compile and run the program is to build the singularity container and run the code inside that.
 Building the container can take a while, depending on your CPU power, because it builds several libraries and needs 12 GB of space. I have tested the code with singularity-ce version 3.11, but other version should work as well.
+Singularity binaries are available [on GitHub](https://github.com/sylabs/singularity/releases) for most Linux distributions.
 ```Shell
 cd tools
 sudo singularity build ppo_cpp.sif make_singularity_image.def
@@ -38,7 +41,8 @@ Generally you need to build the container, compile the program and then set the 
 ### Mujoco
 
 To run the mujoco model cd into the repositories directory and run either of these two commands.
-The environment can be set via the `--env_id` variable. Humanoid-v4, HalfCheetah-v5, Hopper-v5 and Anv-v5  are currently supported.
+The environment can be set via the `--env_id` variable. Humanoid-v4, HalfCheetah-v5, Hopper-v5 and Anv-v5 are currently supported.
+You can find documentation for the mujoco environments in the [gymnasium docs](https://gymnasium.farama.org/environments/mujoco/) the implementations are identical.
 Other hyperparameters can be similarly set via the program arguments.
 ```Shell
 cd /path/to/ppo.cpp
@@ -73,9 +77,16 @@ The code implements the DD-PPO preemption trick.
 I had some runs with poor performance using the preemption trick which is why I disabled it.
 It could be that the trick itself caused the performance degradation but there might also be a bug, so I do not recommend using it right now (use_dd_ppo_preempt=0).
 
-The CARLA training code seems to have higher peak GPU memory usage than our pytorch version.
-My training runs did not max out my GPU memory, so I have not investigated this issue further.
-There might be some PyTorch DDP memory optimization that is not included in our custom implementation or something like that.
+We are using cuda streams to parallelize neural network forward passes on the GPU. 
+Cuda is currently not able to run deterministic algorithms in combination with cuda streams.
+There are 3 solutions to this:
+* `--torch_deterministic 0` Turns off deterministic algorithms. Often reproducible training runs are not necessary.
+* set the environment variable `CUBLAS_WORKSPACE_CONFIG=:4096:8`. This enables deterministic algorithms but induces a large GPU memory overhead (~15 GB for the CaRL model)
+* set the environment variable `CUBLAS_WORKSPACE_CONFIG=:16:8`. This enables deterministic algorithms but reduces performance.
+
+## News
+[19/Oct/2025] Added Ant-v5 and Hopper-v5 environments to mujoco. Singularty container now fully supports mujoco environments. Mujoco renderer can now render multiple environments in parallel.
+[10/Aug/2025] Initial code release.
 
 ## License
 
