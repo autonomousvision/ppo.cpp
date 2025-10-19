@@ -33,6 +33,7 @@
 #include <boost/format.hpp>
 #include <GLFW/glfw3.h>
 
+
 using namespace std;
 using namespace torch;
 using namespace torch::indexing;

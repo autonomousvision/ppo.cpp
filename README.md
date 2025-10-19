@@ -1,6 +1,6 @@
 # ppo.cpp
 This repository implements PPO for continuous action spaces in C++ matching the [CleanRL](https://github.com/vwxyzjn/cleanrl) python implementation closely. It also contains a [minimum port](libs/gymcpp) of [gymnasium](https://github.com/Farama-Foundation/Gymnasium) to C++, containing the needed functionality for PPO.
-Additionally, the repository provides environments for mujoco, [half_cheetah_v5](libs/gymcpp/mujoco/half_cheetah_v5.h) and [humanoid_v4](libs/gymcpp/mujoco/humanoid_v4.h), as well as an environment for autonomous driving with the CARLA leaderboard 2.0.
+Additionally, the repository provides environments for mujoco, [half_cheetah_v5](libs/gymcpp/mujoco/half_cheetah_v5.h), [humanoid_v4](libs/gymcpp/mujoco/humanoid_v4.h), [hopper_v5](libs/gymcpp/mujoco/hopper_v5.h) and [ant_v5](libs/gymcpp/mujoco/ant_v5.h), as well as an environment for autonomous driving with the CARLA leaderboard 2.0.
 
 The repository also implements Asynchronous Collection Proximal Policy Optimization (AC-PPO) which parallelizes data collection via multithreading and cuda streams, leading to faster training time than PPO in nonhomogeneous environments.
 The idea is described in Appendix B.1 of this [paper](https://arxiv.org/abs/2504.17838).
@@ -38,16 +38,16 @@ Generally you need to build the container, compile the program and then set the 
 ### Mujoco
 
 To run the mujoco model cd into the repositories directory and run either of these two commands.
-The environment can be set via the `--env_id` variable. Humanoid-v4 and HalfCheetah-v5 are currently supported.
+The environment can be set via the `--env_id` variable. Humanoid-v4, HalfCheetah-v5, Hopper-v5 and Anv-v5  are currently supported.
 Other hyperparameters can be similarly set via the program arguments.
 ```Shell
 cd /path/to/ppo.cpp
 singularity exec --nv tools/ppo_cpp.sif build/ppo_continuous_action --env_id Humanoid-v4
-singularity exec --nv tools/ppo_cpp.sif mpirun -n 1 --bind-to none  build/ac_ppo_continuous_action --env_id HalfCheetah-v5
+singularity exec --nv tools/ppo_cpp.sif build/ac_ppo_continuous_action --env_id HalfCheetah-v5
 ```
 
 ### Multi-GPU training
-Libtorch does not natively support multi-gpu training.
+Libtorch does not natively support multi-gpu training. 
 We implemented the multi-gpu communication ourselves using the backend code of [torch-fort](https://github.com/NVIDIA/TorchFort).
 To use multiple GPUs for training the code needs to be started with mpirun (`-n` = number of GPUs), similar how pytorch DDP ist started with torchrun:
 ```Shell

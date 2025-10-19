@@ -88,6 +88,34 @@ foreach(source_file  ${APP_SOURCES})
     )
 
 
+    find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
+    target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp/mujoco/assets/humanoid.xml
+            DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/mujoco/assets)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp/mujoco/assets/half_cheetah.xml
+            DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/mujoco/assets)
+
+    find_library(GLFW glfw3 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/glfw_3_4/lib-mingw-w64 REQUIRED)
+
+    target_link_libraries(${source_name} LINK_PUBLIC ${GLFW})
+
+    target_link_libraries(${source_name} LINK_PUBLIC "${TORCH_LIBRARIES}")
+
+    find_package(cppzmq REQUIRED)
+    target_link_libraries(${source_name} LINK_PUBLIC cppzmq)
+
+    install(TARGETS ${source_name} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/install/bin)
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/install/libs)
+    # To install, for example, MSVC runtime libraries:
+    include(InstallRequiredSystemLibraries)
+    # To install other/non-system 3rd party required libraries:
+    configure_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/FixBundle.cmake.in
+            ${CMAKE_CURRENT_BINARY_DIR}/FixBundle.cmake
+            @ONLY
+    )
+
+
     install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/FixBundle.cmake)
 
 endforeach()
