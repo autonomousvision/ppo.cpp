@@ -88,7 +88,7 @@ foreach(source_file  ${APP_SOURCES})
     )
 
 
-    find_library(MUJOCOLIB mujoco PATHS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
+    find_library(MUJOCOLIB mujoco HINTS ${CMAKE_CURRENT_SOURCE_DIR}/libs/mujoco_3_2_0/lib REQUIRED)
     target_link_libraries(${source_name} LINK_PUBLIC ${MUJOCOLIB})
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/libs/gymcpp/mujoco/assets/humanoid.xml
             DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/mujoco/assets)

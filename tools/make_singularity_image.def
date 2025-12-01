@@ -27,6 +27,15 @@ From: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
     apt-get -y install cmake
     apt-get -y install libboost-all-dev
     cd /
+    apt-get -y install libosmesa6-dev libglfw3
+    wget -O "mujoco-3.2.0-linux-x86_64.tar.gz" "https://github.com/google-deepmind/mujoco/releases/download/3.2.0/mujoco-3.2.0-linux-x86_64.tar.gz"
+    mkdir /mujoco
+    tar -xzf mujoco-3.2.0-linux-x86_64.tar.gz -C /mujoco
+    cp /mujoco/mujoco-3.2.0/lib/*.so* /usr/local/lib/
+    cp /mujoco/mujoco-3.2.0/bin/mujoco_plugin/*.so /usr/local/lib/
+    cp -r /mujoco/mujoco-3.2.0/include/* /usr/local/include/
+    ldconfig
+    cd /
     apt-get -y install libwayland-dev libxkbcommon-dev xorg-dev
     mkdir -p /glfw_3_4
     cd /glfw_3_4
