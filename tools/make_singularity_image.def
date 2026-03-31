@@ -1,0 +1,155 @@
+Bootstrap: docker
+From: nvidia/cuda:13.0.2-cudnn-devel-ubuntu22.04
+
+%files
+    ./../libs/tensorboard_logger /tensorboard_logger
+    ./../libs/cppzmq-4.10.0 /cppzmq-4.10.0
+    ./../libs/args-6.4.6 /args-6.4.6
+    ./../libs/json_spirit_v4.08 /json_spirit_v4.08
+
+%post
+    apt-get -y update
+    apt-get -y install --reinstall build-essential
+    apt-get -y install wget
+    apt-get install -y locales
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
+    apt-get install -y autoconf automake libtool curl make unzip git ninja-build
+    apt-get -y remove --purge --auto-remove cmake
+    apt-get -y update
+    apt-get -y install -y lsb-release
+    apt-get -y install software-properties-common
+    add-apt-repository ppa:ubuntu-toolchain-r/test
+    apt-get -y update
+    apt-get -y install -y gcc-13 g++-13
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 13 --slave /usr/bin/g++ g++ /usr/bin/g++-13
+    update-alternatives --set gcc /usr/bin/gcc-13
+    gcc --version
+    apt-get -y update
+    apt-get clean
+    apt-get -y --allow-change-held-packages install libnccl2=2.28.9-1+cuda13.0 libnccl-dev=2.28.9-1+cuda13.0
+    # Fix cuDNN header path for LibTorch
+    ln -s /usr/include/x86_64-linux-gnu/cudnn.h /usr/include/cudnn.h
+    ln -s /usr/include/x86_64-linux-gnu/cudnn_version.h /usr/include/cudnn_version.h
+    apt-get -y install --only-upgrade libstdc++6
+    apt-get -y clean all
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
+    apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
+    apt-get -y update
+    apt-get -y install mesa-utils x11-apps
+    apt-get -y install libgl1-mesa-glx libgl1-mesa-dri
+    apt-get -y install cmake
+    apt-get -y install libboost-all-dev
+    cd /
+    apt-get -y install libosmesa6-dev libglfw3
+    wget -O "mujoco-3.2.0-linux-x86_64.tar.gz" "https://github.com/google-deepmind/mujoco/releases/download/3.2.0/mujoco-3.2.0-linux-x86_64.tar.gz"
+    mkdir /mujoco
+    tar -xzf mujoco-3.2.0-linux-x86_64.tar.gz -C /mujoco
+    rm mujoco-3.2.0-linux-x86_64.tar.gz
+    cp /mujoco/mujoco-3.2.0/lib/*.so* /usr/local/lib/
+    cp /mujoco/mujoco-3.2.0/bin/mujoco_plugin/*.so /usr/local/lib/
+    cp -r /mujoco/mujoco-3.2.0/include/* /usr/local/include/
+    ldconfig
+    cd /
+    apt-get -y install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev
+    wget -O "raylib-5.5.tar.gz" "https://github.com/raysan5/raylib/archive/refs/tags/5.5.tar.gz"
+    tar -xzf raylib-5.5.tar.gz
+    rm raylib-5.5.tar.gz
+    cd "raylib-5.5"
+    mkdir build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local ..
+    make -j$(nproc)
+    make install
+    ldconfig
+    cd /
+    rm -rf raylib-5.5
+    apt-get -y install libwayland-dev libxkbcommon-dev xorg-dev
+    mkdir -p /glfw_3_4
+    cd /glfw_3_4
+    wget https://github.com/glfw/glfw/archive/refs/tags/3.4.tar.gz
+    tar -xvzf 3.4.tar.gz
+    rm 3.4.tar.gz
+    cd glfw-3.4
+    mkdir -p build2 && cmake -B build2 -S . && cmake --build build2 -j
+    cmake --install build2
+    cd /
+    wget https://download.pytorch.org/libtorch/cu130/libtorch-shared-with-deps-2.10.0%2Bcu130.zip
+    unzip libtorch-shared-with-deps-2.10.0+cu130.zip
+    rm libtorch-shared-with-deps-2.10.0+cu130.zip
+    apt-get -y install infiniband-diags ibverbs-utils libibverbs-dev libfabric1 libfabric-dev libpsm2-dev
+    apt-get install -y openmpi-bin openmpi-common libopenmpi-dev libgtk2.0-dev
+    apt-get install -y librdmacm-dev libpsm2-dev
+    apt-get install -y  devscripts debhelper fakeroot
+
+    apt-get -y install ninja-build
+    apt-get -y install libblas-dev liblapack-dev
+    apt-get -y install gpg-agent wget
+    wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list
+    apt-get -y update
+    apt-get -y install intel-oneapi-mkl
+    apt-get -y install intel-oneapi-mkl-devel
+    apt-get -y install libhwloc-dev
+    apt-get -y install libevent-dev
+    apt-get -y install libgomp1
+    apt-get -y install pkg-config
+    apt-get -y install libtinfo6
+    apt-get -y install libgtk2.0-dev
+    apt-get -y install ffmpeg
+    apt-get -y install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev
+    apt-get -y install libeigen3-dev
+    apt-get -y install libcanberra-gtk-module libcanberra-gtk3-module
+    wget https://github.com/protocolbuffers/protobuf/releases/download/v3.13.0/protobuf-cpp-3.13.0.tar.gz
+    tar -xvzf protobuf-cpp-3.13.0.tar.gz
+    rm protobuf-cpp-3.13.0.tar.gz
+    cd protobuf-3.13.0
+    ./autogen.sh
+    ./configure
+    make -j$(nproc)  # Compile using all CPU cores
+    make install
+    ldconfig
+    protoc --version
+    cd /tensorboard_logger
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
+    cd /
+    apt-get -y install libzmq3-dev
+    cd /cppzmq-4.10.0
+    mkdir build3
+    cd build3
+    cmake ..
+    make -j4 install
+    cd /
+    cd /args-6.4.6
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
+    cd /
+    cd /json_spirit_v4.08
+    mkdir -p build3 && cmake -B build3 . && cmake --build build3 -j
+    cmake --install build3
+    cd /
+    # https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html
+    mkdir -p opencv
+    cd opencv
+    wget -O opencv.zip https://github.com/opencv/opencv/archive/4.10.0.zip
+    unzip opencv.zip
+    rm opencv.zip
+    mkdir -p build && cd build
+    cmake -G Ninja ../opencv-4.10.0
+    cmake --build .
+    ninja install
+    cd /
+
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    rm -rf /usr/share/doc/* /usr/share/man/*
+
+    gcc --version
+
+%environment
+    # Ensure the environment knows where to look for the new compiler if needed
+    export CC=/usr/bin/gcc-13
+    export CXX=/usr/bin/g++-13
+
+%runscript
+

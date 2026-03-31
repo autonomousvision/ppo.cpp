@@ -1,0 +1,115 @@
+singularity exec --nv --env CUBLAS_WORKSPACE_CONFIG=:4096:8 tools/ppo_cpp.sif ./cmake-build-release/ac_ppo_continuous_action --train_device gpu --exp_name_stem Humanoid-v4_AC_PPO_num_envs_128_samples_100M_2 --num_envs 128 --total_timesteps 100000000 --env_id Humanoid-v4
+
+Ant-v5 best score 6611
+
+TODOs:
+Hopper performance of AC_PPO is weirdly low. Investigate
+Implement Humanoid Standup
+Implement Walker2D
+Implement HumanoidV5 to be consistent
+
+Implement separate policy visualization / evaluation
+
+
+--render
+rgb_array
+--num_envs
+32
+--train_device
+gpu
+--collect_device
+cpu
+--num_steps
+384
+--update_epochs
+1
+--num_minibatches
+1
+leads to SPS: 242243
+with 32 dummy vehicles.
+
+
+------------------------------------------------------------------
+--num_envs
+32
+--num_steps
+384
+--update_epochs
+1
+--num_minibatches
+1
+
+Rank: 0 Time to log 0.018584 seconds
+Rank: 0 Time to collect data: 0.259174 seconds
+Rank: 0 Time to compute advantage: 0.102302 seconds
+global_step=60877440, avg_episodic_return=1.39
+Rank: 0 Time to train 0.207338 seconds
+SPS: 128884
+Rank: 0 Time to log 0.007708 seconds
+{100.0%} [########################################] (0:7:52 < 0:0:0) [814/813]
+------------------------------------------------------------------
+
+
+------------------------------------------------------------------
+--num_envs
+128
+--train_device
+gpu
+--collect_device
+cpu
+--num_steps
+1024
+
+{100.0%} [########################################] (0:9:18 < 0:0:0) [76/76]
+{100.0%} [########################################] (0:9:25 < 0:0:0) [77/76]
+ Rank: 0 Time to collect data: 2.162983 seconds
+Rank: 0 Time to compute advantage: 1.067105 seconds
+global_step=63270912, avg_episodic_return=1.05
+Rank: 0 Time to train 4.036575 seconds
+SPS: 111826
+Rank: 0 Time to log 0.007888 seconds
+------------------------------------------------------------------
+
+
+--num_envs
+128
+--num_steps
+512
+--update_epochs
+1
+--num_minibatches
+1
+--learning_rate
+0.001
+
+global_step=63270912, avg_episodic_return=0.77
+Rank: 0 Time to train 1.047283 seconds
+SPS: 155098
+
+------------------------------------------------------------------
+
+Evaluation result: episode=56 episodic_return=1.00
+Evaluation result: episode=56 episodic_return=-0.80
+Average evaluation return=-0.28 over 58 episodes
+
+global_step=634790400, avg_episodic_return=1.69
+Rank: 0 Time to train 1.104578 seconds
+SPS: 152279
+Rank: 0 Time to log 0.007891 seconds
+Training finished Press Enter to evaluate model...
+{100.0%} [########################################] (1:9:28 < 0:0:0) [1526/1525]
+
+--num_envs
+128
+--num_steps
+512
+--update_epochs
+1
+--num_minibatches
+1
+--learning_rate
+0.00025
+--total_timesteps
+100000000
+--exp_name_stem
+PufferDrive-v0-001
