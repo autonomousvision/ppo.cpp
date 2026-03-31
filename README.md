@@ -1,3 +1,12 @@
+This code is a work in progress and may have bugs and unfinished features.
+At the current point we do not support it yet / will not answer questions or issues.
+
+## License
+
+You can use the code at your own risk under the following license:
+The original code in this repository is provided under the Civil-A license, which is a variant of the Apache 2.0 license that bans dual-use. The license contains a partial copyleft which requires derivative work to include the civil clause from the end of the license in their license. For further information see [Civil Software Licenses](https://civil-software-licenses.github.io).
+
+
 # ppo.cpp
 This repository implements PPO for continuous action spaces in C++ matching the [CleanRL](https://github.com/vwxyzjn/cleanrl) python implementation closely. It also contains a [minimum port](libs/gymcpp) of [gymnasium](https://github.com/Farama-Foundation/Gymnasium) to C++, containing the needed functionality for PPO.
 Additionally, the repository provides environments for mujoco, [half_cheetah_v5](libs/gymcpp/mujoco/half_cheetah_v5.h) and [humanoid_v4](libs/gymcpp/mujoco/humanoid_v4.h), as well as an environment for autonomous driving with the CARLA leaderboard 2.0.
@@ -76,10 +85,6 @@ It could be that the trick itself caused the performance degradation but there m
 The CARLA training code seems to have higher peak GPU memory usage than our pytorch version.
 My training runs did not max out my GPU memory, so I have not investigated this issue further.
 There might be some PyTorch DDP memory optimization that is not included in our custom implementation or something like that.
-
-## License
-
-The original code in this repository is provided under the Civil-M license, which is a variant of the MIT license that bans dual-use. [The license](LICENSE) contains a partial copyleft which requires derivative work to include the civil clause in their license. For further information see the accompaning documentation on [Civil Software Licenses](docs/Jaeger2025LicenseWhitepaper.pdf).
 
 ## Citation
 If you find the repo useful, please consider giving it a star &#127775;.
